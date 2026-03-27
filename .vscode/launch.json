@@ -1,36 +1,39 @@
 {
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "Backend (Uvicorn Debug)",
-      "type": "python",
-      "request": "launch",
-      "module": "uvicorn",
-      "args": [
-        "app.main:app",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        "8000",
-        "--reload"
-      ],
-      "cwd": "${workspaceFolder}/backend",
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}/backend"
-      },
-      "justMyCode": true
-    },
-    {
-      "name": "Frontend (Vite)",
-      "type": "node-terminal",
-      "request": "launch",
-      "command": "cd ${workspaceFolder}/frontend && npm run dev"
-    }
-  ],
-  "compounds": [
-    {
-      "name": "Full Stack Debug",
-      "configurations": ["Backend (Uvicorn Debug)", "Frontend (Vite)"]
-    }
-  ]
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Backend (Uvicorn Debug)",
+            "type": "python",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "app.main:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8000",
+                "--reload"
+            ],
+            "cwd": "${workspaceFolder}/backend",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backend"
+            },
+            "justMyCode": true
+        },
+        {
+            "name": "Frontend (Vite)",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "cd ${workspaceFolder}/frontend && npm run dev"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Full Stack Debug",
+            "configurations": [
+                "Backend (Uvicorn Debug)",
+                "Frontend (Vite)"
+            ]
+        }
+    ]
 }
