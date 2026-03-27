@@ -43,7 +43,7 @@ cd backend
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -60,6 +60,45 @@ curl -sS http://127.0.0.1:8000/api/v1/stats/overview
 ```
 
 要求：HTTP 正常返回 JSON。
+
+### 2.5 自动化测试与覆盖率门禁
+
+后端：
+
+```bash
+cd backend
+../.venv/bin/python -m pytest
+```
+
+前端单测：
+
+```bash
+cd frontend
+npm run test
+```
+
+前端覆盖率（必须通过阈值）：
+
+```bash
+cd frontend
+npm run test:coverage
+```
+
+前端构建：
+
+```bash
+cd frontend
+npm run build
+```
+
+要求：以上命令全部通过。
+
+### 2.6 GitHub Actions 状态
+
+在发版前确认最新 commit 的 CI 通过：
+
+- backend-tests
+- frontend-tests-build
 
 ## 3. 生成首发提交
 

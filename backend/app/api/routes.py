@@ -6,6 +6,7 @@ from io import StringIO
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
+from app.core.config import API_DEFAULT_CASES_LIMIT, API_MAX_CASES_LIMIT
 from app.core.schemas import (
     ConsulateGroupsResponse,
     HealthResponse,
@@ -95,7 +96,7 @@ def cases(
     statuses: str | None = Query(default=None),
     entries: str | None = Query(default=None),
     months: str | None = Query(default=None),
-    limit: int = Query(default=200, ge=1, le=5000),
+    limit: int = Query(default=API_DEFAULT_CASES_LIMIT, ge=1, le=API_MAX_CASES_LIMIT),
     offset: int = Query(default=0, ge=0),
 ):
     filtered = _filtered_rows(visa_types, consulates, statuses, entries, months)

@@ -21,7 +21,10 @@
 - [功能清单](#功能清单)
 - [技术架构](#技术架构)
 - [快速开始](#快速开始)
+- [环境变量配置](#环境变量配置)
 - [本地调试](#本地调试)
+- [测试与质量门禁](#测试与质量门禁)
+- [国际化与可访问性](#国际化与可访问性)
 - [API 概览](#api-概览)
 - [项目结构](#项目结构)
 - [数据与合规说明](#数据与合规说明)
@@ -58,6 +61,12 @@ Checkee Visa Analytics 是一个面向签证申请数据分析的全栈项目，
   - 局部容错加载（单接口失败不拖垮整页）
   - 趋势图 + 明细表联动
   - 一键导出 Markdown 报告与 CSV
+- 工程化能力
+  - 前后端环境变量配置化（默认值可覆盖）
+  - 前端中英双语切换（i18n）与功能开关
+  - 关键页面 a11y 语义增强（aria/label/caption/focus-visible）
+  - 后端 pytest 基线 + 前端 Vitest/RTL 基线
+  - GitHub Actions CI（后端测试 + 前端覆盖率门禁 + 构建）
 
 ## 技术架构
 
@@ -87,7 +96,7 @@ Checkee Visa Analytics 是一个面向签证申请数据分析的全栈项目，
 
 ```bash
 cd frontend
-npm install
+npm ci
 ```
 
 ### 3. 启动后端
@@ -110,6 +119,40 @@ npm run dev
 - 后端：http://127.0.0.1:8000
 - OpenAPI 文档：http://127.0.0.1:8000/docs
 
+## 环境变量配置
+
+### 后端配置
+
+```bash
+cd backend
+cp .env.example .env
+```
+
+常用变量：
+
+- `CHECKEE_DATA_DIR`：数据目录（CSV/JSON）
+- `CHECKEE_MAX_FETCH_MONTHS`：抓取月份上限
+- `CHECKEE_API_DEFAULT_REFRESH_MONTHS`：默认刷新月份
+- `CHECKEE_API_MAX_CASES_LIMIT`：明细接口最大分页大小
+- `CHECKEE_CORS_ALLOW_ORIGINS`：允许的跨域来源
+
+### 前端配置
+
+```bash
+cd frontend
+cp .env.example .env
+```
+
+常用变量：
+
+- `VITE_API_BASE_URL`：后端 API 基地址
+- `VITE_DEFAULT_PAGE_SIZE`：明细默认分页大小
+- `VITE_DEFAULT_REFRESH_MONTHS`：刷新按钮默认月份
+- `VITE_PAGE_SIZE_OPTIONS`：分页候选值（逗号分隔）
+- `VITE_ENABLE_LANGUAGE_SWITCH`：是否显示语言切换
+- `VITE_ENABLE_SENSITIVITY`：是否显示敏感性分析模块
+- `VITE_ENABLE_CONSULATE_GROUPS`：是否显示领馆分组筛选
+
 ## 本地调试
 
 项目已包含 VS Code 调试配置，可直接使用：
@@ -128,6 +171,61 @@ npm run dev
 - `.vscode/tasks.json`
 - `.vscode/launch.json`
 - `.vscode/settings.json`
+
+## 测试与质量门禁
+
+### 后端测试
+
+```bash
+cd backend
+../.venv/bin/python -m pytest
+```
+
+### 前端测试
+
+```bash
+cd frontend
+npm run test
+```
+
+### 前端覆盖率（含阈值门禁）
+
+```bash
+cd frontend
+npm run test:coverage
+```
+
+当前阈值（Vitest）：
+
+- statements >= 25
+- lines >= 25
+- functions >= 20
+- branches >= 40
+
+### 前端构建检查
+
+```bash
+cd frontend
+npm run build
+```
+
+### CI
+
+GitHub Actions 工作流位于 `.github/workflows/ci.yml`，在 `push`/`pull_request` 时执行：
+
+- backend: `pytest`
+- frontend: `npm run test:coverage`
+- frontend: `npm run build`
+
+## 国际化与可访问性
+
+- i18n：基于 i18next + react-i18next，内置 `zh`/`en` 资源。
+- 语言切换：通过页头下拉选择器切换，默认根据本地存储与浏览器语言检测。
+- a11y：
+  - 表单控件关联 `label` / `htmlFor`
+  - 错误与加载状态使用 `role=alert/status` 与 `aria-live`
+  - 数据表增加 `caption` 与表头语义
+  - 全局 `:focus-visible` 焦点样式
 
 ## API 概览
 
@@ -149,17 +247,25 @@ npm run dev
 
 ```text
 .
+├── .github/
+│   └── workflows/
+│       └── ci.yml
 ├── backend/
 │   ├── app/
 │   │   ├── api/
 │   │   ├── core/
 │   │   └── services/
+│   ├── tests/
+│   └── .env.example
 │   └── data/
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
+│   │   ├── locales/
+│   │   └── test/
 │   │   ├── api.ts
 │   │   └── App.tsx
+│   ├── .env.example
 │   └── package.json
 ├── .vscode/
 ├── LICENSE
@@ -188,9 +294,10 @@ npm run dev
 ## 路线图
 
 - [ ] 增加定时刷新任务（6h / 12h / 24h）
-- [ ] 增加测试体系（后端单元测试 + 前端组件测试）
+- [x] 增加测试体系（后端 pytest + 前端 Vitest/RTL）
 - [ ] 增加部署模板（Docker / 云部署）
-- [ ] 增加权限与配置管理（环境变量化）
+- [x] 增加权限与配置管理（环境变量化）
+- [ ] 增加更高覆盖率目标与回归集扩展
 
 ## 贡献指南
 

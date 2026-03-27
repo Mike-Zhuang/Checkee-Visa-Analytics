@@ -9,10 +9,11 @@ import type {
     RefreshPayload,
     SensitivityItem
 } from './types'
+import { frontendConfig } from './config'
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://127.0.0.1:8000/api/v1'
+const API_BASE = frontendConfig.apiBaseUrl
 
-function paramsFromFilters(filters: Filters): URLSearchParams {
+export function paramsFromFilters(filters: Filters): URLSearchParams {
     const params = new URLSearchParams()
     const assign = (key: keyof Filters) => {
         if (filters[key].length) {
@@ -60,18 +61,21 @@ export async function getConsulateGroups(): Promise<ConsulateGroupsResponse> {
 
 export async function getOverview(filters: Filters): Promise<OverviewStats> {
     const params = paramsFromFilters(filters)
-    return fetchJson<OverviewStats>(`/stats/overview?${params.toString()}`)
+    const query = params.toString()
+    return fetchJson<OverviewStats>(`/stats/overview${query ? `?${query}` : ''}`)
 }
 
 export async function getMonthly(filters: Filters): Promise<MonthlyItem[]> {
     const params = paramsFromFilters(filters)
-    const data = await fetchJson<{ items: MonthlyItem[] }>(`/stats/monthly?${params.toString()}`)
+    const query = params.toString()
+    const data = await fetchJson<{ items: MonthlyItem[] }>(`/stats/monthly${query ? `?${query}` : ''}`)
     return data.items
 }
 
 export async function getSensitivity(filters: Filters): Promise<SensitivityItem[]> {
     const params = paramsFromFilters(filters)
-    const data = await fetchJson<{ items: SensitivityItem[] }>(`/stats/sensitivity?${params.toString()}`)
+    const query = params.toString()
+    const data = await fetchJson<{ items: SensitivityItem[] }>(`/stats/sensitivity${query ? `?${query}` : ''}`)
     return data.items
 }
 
@@ -84,10 +88,12 @@ export async function getCases(filters: Filters, limit = 200, offset = 0): Promi
 
 export function exportCasesUrl(filters: Filters): string {
     const params = paramsFromFilters(filters)
-    return `${API_BASE}/export/cases.csv?${params.toString()}`
+    const query = params.toString()
+    return `${API_BASE}/export/cases.csv${query ? `?${query}` : ''}`
 }
 
 export function exportReportUrl(filters: Filters): string {
     const params = paramsFromFilters(filters)
-    return `${API_BASE}/export/report?${params.toString()}`
+    const query = params.toString()
+    return `${API_BASE}/export/report${query ? `?${query}` : ''}`
 }

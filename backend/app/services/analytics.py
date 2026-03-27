@@ -6,6 +6,8 @@ from datetime import date
 from statistics import mean, median
 from typing import Any
 
+from app.core.config import BOOTSTRAP_SEED
+
 
 def percentile(values: list[float], p: float) -> float:
     if not values:
@@ -53,7 +55,7 @@ def stats(values: list[int]) -> dict[str, float]:
     }
 
 
-def bootstrap_ci(values: list[int], stat_func, n_boot: int = 2500, seed: int = 20260327) -> tuple[float, float, float]:
+def bootstrap_ci(values: list[int], stat_func, n_boot: int = 2500, seed: int = BOOTSTRAP_SEED) -> tuple[float, float, float]:
     if not values:
         return float("nan"), float("nan"), float("nan")
     rng = random.Random(seed)

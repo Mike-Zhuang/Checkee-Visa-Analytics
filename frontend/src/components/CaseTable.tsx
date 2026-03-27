@@ -1,4 +1,7 @@
 import type { CaseItem } from '../types'
+import { useTranslation } from 'react-i18next'
+
+import { frontendConfig } from '../config'
 
 type Props = {
     rows: CaseItem[]
@@ -10,29 +13,31 @@ type Props = {
 }
 
 export default function CaseTable({ rows, total, page, pageSize, onPageChange, onPageSizeChange }: Props) {
+    const { t } = useTranslation()
     const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
     return (
-        <section className="panel">
+        <section className="panel" role="region" aria-labelledby="cases-title">
             <div className="panel-head">
-                <h3>案例明细</h3>
-                <p>当前返回 {rows.length} / {total}</p>
+                <h3 id="cases-title">{t('cases.title')}</h3>
+                <p>{t('cases.summary', { count: rows.length, total })}</p>
             </div>
 
-            {total === 0 ? <div className="empty-box">当前筛选条件下无案例数据，请调整筛选或先刷新抓取。</div> : null}
+            {total === 0 ? <div className="empty-box">{t('cases.empty')}</div> : null}
 
             <div className="table-wrap">
                 <table>
+                    <caption>{t('cases.caption')}</caption>
                     <thead>
                         <tr>
-                            <th>Case</th>
-                            <th>Visa</th>
-                            <th>Entry</th>
-                            <th>Consulate</th>
-                            <th>Status</th>
-                            <th>Check Date</th>
-                            <th>Complete Date</th>
-                            <th>Calc Days</th>
+                            <th scope="col">{t('cases.case')}</th>
+                            <th scope="col">{t('cases.visa')}</th>
+                            <th scope="col">{t('cases.entry')}</th>
+                            <th scope="col">{t('cases.consulate')}</th>
+                            <th scope="col">{t('cases.status')}</th>
+                            <th scope="col">{t('cases.checkDate')}</th>
+                            <th scope="col">{t('cases.completeDate')}</th>
+                            <th scope="col">{t('cases.calcDays')}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -53,19 +58,27 @@ export default function CaseTable({ rows, total, page, pageSize, onPageChange, o
             </div>
 
             <div className="pagination">
-                <button className="ghost" onClick={() => onPageChange(1)} disabled={page <= 1}>首页</button>
-                <button className="ghost" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>上一页</button>
-                <span>第 {page} / {totalPages} 页</span>
-                <button className="ghost" onClick={() => onPageChange(page + 1)} disabled={page >= totalPages}>下一页</button>
-                <button className="ghost" onClick={() => onPageChange(totalPages)} disabled={page >= totalPages}>末页</button>
-                <label className="page-size">
-                    每页
-                    <select value={String(pageSize)} onChange={(e) => onPageSizeChange(Number(e.currentTarget.value))}>
-                        <option value="50">50</option>
-                        <option value="100">100</option>
-                        <option value="200">200</option>
+                <button type="button" className="ghost" onClick={() => onPageChange(1)} disabled={page <= 1} aria-label={t('cases.first')}>
+                    {t('cases.first')}
+                </button>
+                <button type="button" className="ghost" onClick={() => onPageChange(page - 1)} disabled={page <= 1} aria-label={t('cases.prev')}>
+                    {t('cases.prev')}
+                </button>
+                <span aria-live="polite">{t('cases.page', { page, total: totalPages })}</span>
+                <button type="button" className="ghost" onClick={() => onPageChange(page + 1)} disabled={page >= totalPages} aria-label={t('cases.next')}>
+                    {t('cases.next')}
+                </button>
+                <button type="button" className="ghost" onClick={() => onPageChange(totalPages)} disabled={page >= totalPages} aria-label={t('cases.last')}>
+                    {t('cases.last')}
+                </button>
+                <label className="page-size" htmlFor="page-size-select">
+                    {t('cases.perPage')}
+                    <select id="page-size-select" value={String(pageSize)} onChange={(e) => onPageSizeChange(Number(e.currentTarget.value))}>
+                        {frontendConfig.pageSizeOptions.map((item) => (
+                            <option key={item} value={String(item)}>{item}</option>
+                        ))}
                     </select>
-                    条
+                    {t('cases.rows')}
                 </label>
             </div>
         </section>

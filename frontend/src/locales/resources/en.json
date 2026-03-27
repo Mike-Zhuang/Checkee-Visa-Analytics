@@ -1,0 +1,102 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "na": "-"
+  },
+  "app": {
+    "title": "Checkee Visa Analytics",
+    "subtitle": "Real-time analytics platform for all visa types",
+    "exportReport": "Export Report",
+    "exportCsv": "Export CSV",
+    "language": "Language",
+    "sampleCount": "Samples: {{count}}",
+    "fetchRange": "Fetch Range: {{earliest}} ~ {{latest}}",
+    "monthLimit": "Month cap reached: {{limit}}",
+    "noRefresh": "No refresh record",
+    "updatedOnly": "Updated at: {{time}}",
+    "updatedAgo": "Updated at: {{time}} (~{{minutes}} mins ago)",
+    "moduleLoading": "Loading... {{overview}}{{cases}}",
+    "overviewModule": "stats ",
+    "casesModule": "cases"
+  },
+  "filter": {
+    "title": "Filters",
+    "hint": "Multi-select supported. Hold Command for quick multi-select. Historical fetch is supported with a start month.",
+    "refreshFromMonth": "Fetch Start Month",
+    "refresh": "Refresh Data",
+    "reset": "Reset Filters",
+    "noChips": "No filters selected",
+    "removeChip": "Remove",
+    "visaTypes": "Visa Types",
+    "months": "Months",
+    "statuses": "Statuses",
+    "entries": "Visa Entries",
+    "consulates": "Consulates",
+    "groupedConsulates": "Consulates by country/region",
+    "toggleGroup": "Toggle Group",
+    "quick3": "Last 3 Months",
+    "quick6": "Last 6 Months",
+    "quick12": "Last 12 Months",
+    "chipVisa": "Visa:{{value}}",
+    "chipMonth": "Month:{{value}}",
+    "chipConsulate": "Consulate:{{value}}",
+    "chipStatus": "Status:{{value}}",
+    "chipEntry": "Entry:{{value}}"
+  },
+  "stats": {
+    "total": "Total Samples",
+    "finalized": "Finalized",
+    "pending": "Pending",
+    "maturity": "Maturity",
+    "median": "Median",
+    "p90": "P90",
+    "days": "days",
+    "ci95": "95% CI"
+  },
+  "chart": {
+    "title": "Trend & Maturity",
+    "hint": "Click a month to drill down case details",
+    "pendingRatio": "Pending Ratio",
+    "medianDays": "Median (days)",
+    "p90Days": "P90 (days)"
+  },
+  "sensitivity": {
+    "title": "Right-censored Sensitivity",
+    "hint": "Conservative / Neutral / Aggressive estimate bands",
+    "scenario": "Scenario",
+    "median": "Median (days)",
+    "p90": "P90 (days)",
+    "tailRatio": ">=90d Ratio"
+  },
+  "cases": {
+    "title": "Case Details",
+    "summary": "Showing {{count}} / {{total}}",
+    "empty": "No case data for current filters. Adjust filters or refresh first.",
+    "caption": "Visa cases",
+    "case": "Case",
+    "visa": "Visa",
+    "entry": "Entry",
+    "consulate": "Consulate",
+    "status": "Status",
+    "checkDate": "Check Date",
+    "completeDate": "Complete Date",
+    "calcDays": "Calc Days",
+    "first": "First",
+    "prev": "Previous",
+    "next": "Next",
+    "last": "Last",
+    "page": "Page {{page}} / {{total}}",
+    "perPage": "Per page",
+    "rows": "rows"
+  },
+  "errors": {
+    "overview": "Overview load failed: {{message}}",
+    "monthly": "Monthly stats load failed: {{message}}",
+    "sensitivity": "Sensitivity stats load failed: {{message}}",
+    "metaState": "State load failed: {{message}}",
+    "cases": "Case details load failed: {{message}}",
+    "options": "Filter options load failed: {{message}}",
+    "groups": "Consulate groups load failed: {{message}}",
+    "refresh": "Refresh failed: {{message}}"
+  }
+}

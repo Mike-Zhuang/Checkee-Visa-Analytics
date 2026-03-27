@@ -1,0 +1,102 @@
+{
+  "common": {
+    "loading": "加载中...",
+    "na": "-"
+  },
+  "app": {
+    "title": "Checkee Visa Analytics",
+    "subtitle": "全签证类型实时分析平台 · 前后端分离 MVP",
+    "exportReport": "导出报告",
+    "exportCsv": "导出CSV",
+    "language": "语言",
+    "sampleCount": "样本数: {{count}}",
+    "fetchRange": "抓取范围: {{earliest}} ~ {{latest}}",
+    "monthLimit": "已触发月份上限: {{limit}}",
+    "noRefresh": "尚无刷新记录",
+    "updatedOnly": "更新时间: {{time}}",
+    "updatedAgo": "更新时间: {{time}}（距今约 {{minutes}} 分钟）",
+    "moduleLoading": "加载中... {{overview}}{{cases}}",
+    "overviewModule": "统计模块 ",
+    "casesModule": "明细模块"
+  },
+  "filter": {
+    "title": "筛选条件",
+    "hint": "可多选；按住 Command 可快速多选。支持按起始月份向前抓取更多历史数据。",
+    "refreshFromMonth": "抓取起始月份",
+    "refresh": "刷新数据",
+    "reset": "重置筛选",
+    "noChips": "当前无筛选条件",
+    "removeChip": "点击移除",
+    "visaTypes": "签证类型",
+    "months": "月份",
+    "statuses": "状态",
+    "entries": "签证条目",
+    "consulates": "领馆",
+    "groupedConsulates": "领馆（按国家/地区分组）",
+    "toggleGroup": "整组切换",
+    "quick3": "最近3月",
+    "quick6": "最近6月",
+    "quick12": "最近12月",
+    "chipVisa": "签证:{{value}}",
+    "chipMonth": "月份:{{value}}",
+    "chipConsulate": "领馆:{{value}}",
+    "chipStatus": "状态:{{value}}",
+    "chipEntry": "条目:{{value}}"
+  },
+  "stats": {
+    "total": "总样本",
+    "finalized": "结案样本",
+    "pending": "Pending",
+    "maturity": "样本成熟度",
+    "median": "中位数",
+    "p90": "P90",
+    "days": "天",
+    "ci95": "95%CI"
+  },
+  "chart": {
+    "title": "趋势与成熟度",
+    "hint": "点击某个月可钻取该月案例明细",
+    "pendingRatio": "Pending比率",
+    "medianDays": "中位数(天)",
+    "p90Days": "P90(天)"
+  },
+  "sensitivity": {
+    "title": "右删失敏感性分析",
+    "hint": "Conservative / Neutral / Aggressive 三口径区间",
+    "scenario": "Scenario",
+    "median": "Median (days)",
+    "p90": "P90 (days)",
+    "tailRatio": ">=90d Ratio"
+  },
+  "cases": {
+    "title": "案例明细",
+    "summary": "当前返回 {{count}} / {{total}}",
+    "empty": "当前筛选条件下无案例数据，请调整筛选或先刷新抓取。",
+    "caption": "签证案例列表",
+    "case": "Case",
+    "visa": "Visa",
+    "entry": "Entry",
+    "consulate": "Consulate",
+    "status": "Status",
+    "checkDate": "Check Date",
+    "completeDate": "Complete Date",
+    "calcDays": "Calc Days",
+    "first": "首页",
+    "prev": "上一页",
+    "next": "下一页",
+    "last": "末页",
+    "page": "第 {{page}} / {{total}} 页",
+    "perPage": "每页",
+    "rows": "条"
+  },
+  "errors": {
+    "overview": "概览加载失败: {{message}}",
+    "monthly": "月度统计加载失败: {{message}}",
+    "sensitivity": "敏感性分析加载失败: {{message}}",
+    "metaState": "状态信息加载失败: {{message}}",
+    "cases": "案例明细加载失败: {{message}}",
+    "options": "筛选项加载失败: {{message}}",
+    "groups": "领馆分组加载失败: {{message}}",
+    "refresh": "刷新失败: {{message}}"
+  }
+}

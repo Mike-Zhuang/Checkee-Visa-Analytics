@@ -1,10 +1,13 @@
 import type { ConsulateGroup, Filters, OptionsResponse, RefreshPayload } from '../types'
+import { useTranslation } from 'react-i18next'
 
 type Props = {
     options: OptionsResponse
     consulateGroups: ConsulateGroup[]
     filters: Filters
     refreshFromMonth: string
+    defaultRefreshMonths: number
+    showConsulateGroups: boolean
     onRefreshFromMonthChange: (value: string) => void
     onChange: (next: Filters) => void
     onReset: () => void
@@ -12,22 +15,26 @@ type Props = {
 }
 
 function MultiSelect({
+    id,
     label,
     values,
     selected,
     onPick
 }: {
+    id: string
     label: string
     values: string[]
     selected: string[]
     onPick: (v: string[]) => void
 }) {
     return (
-        <label className="field">
-            <span>{label}</span>
+        <label className="field" htmlFor={id}>
+            <span id={`${id}-label`}>{label}</span>
             <select
+                id={id}
                 multiple
                 value={selected}
+                aria-labelledby={`${id}-label`}
                 onChange={(e) => {
                     const next = Array.from(e.currentTarget.selectedOptions).map((o) => o.value)
                     onPick(next)
@@ -53,17 +60,21 @@ export default function FilterBar({
     consulateGroups,
     filters,
     refreshFromMonth,
+    defaultRefreshMonths,
+    showConsulateGroups,
     onRefreshFromMonthChange,
     onChange,
     onReset,
     onRefresh
 }: Props) {
+    const { t } = useTranslation()
+
     const chips = [
-        ...filters.visa_types.map((v) => ({ field: 'visa_types' as const, value: v, label: `签证:${v}` })),
-        ...filters.months.map((v) => ({ field: 'months' as const, value: v, label: `月份:${v}` })),
-        ...filters.consulates.map((v) => ({ field: 'consulates' as const, value: v, label: `领馆:${v}` })),
-        ...filters.statuses.map((v) => ({ field: 'statuses' as const, value: v, label: `状态:${v}` })),
-        ...filters.entries.map((v) => ({ field: 'entries' as const, value: v, label: `条目:${v}` }))
+        ...filters.visa_types.map((v) => ({ field: 'visa_types' as const, value: v, label: t('filter.chipVisa', { value: v }) })),
+        ...filters.months.map((v) => ({ field: 'months' as const, value: v, label: t('filter.chipMonth', { value: v }) })),
+        ...filters.consulates.map((v) => ({ field: 'consulates' as const, value: v, label: t('filter.chipConsulate', { value: v }) })),
+        ...filters.statuses.map((v) => ({ field: 'statuses' as const, value: v, label: t('filter.chipStatus', { value: v }) })),
+        ...filters.entries.map((v) => ({ field: 'entries' as const, value: v, label: t('filter.chipEntry', { value: v }) }))
     ]
 
     const removeChip = (field: keyof Filters, value: string) => {
@@ -85,43 +96,48 @@ export default function FilterBar({
     }
 
     return (
-        <section className="filter-card">
-            <h3>筛选条件</h3>
-            <p className="hint">可多选；按住 Command 可快速多选。支持按起始月份向前抓取更多历史数据。</p>
+        <section className="filter-card" role="region" aria-labelledby="filters-title">
+            <h3 id="filters-title">{t('filter.title')}</h3>
+            <p className="hint" id="filters-hint">{t('filter.hint')}</p>
 
             <div className="refresh-row">
-                <label className="field field-inline">
-                    <span>抓取起始月份</span>
+                <label className="field field-inline" htmlFor="refresh-from-month">
+                    <span>{t('filter.refreshFromMonth')}</span>
                     <input
+                        id="refresh-from-month"
                         type="month"
                         value={refreshFromMonth}
+                        aria-describedby="filters-hint"
                         onChange={(e) => onRefreshFromMonthChange(e.currentTarget.value)}
                     />
                 </label>
                 <div className="actions compact">
                     <button
+                        type="button"
                         onClick={() =>
                             onRefresh({
                                 all_months: false,
-                                months: 6,
+                                months: defaultRefreshMonths,
                                 from_month: refreshFromMonth || null
                             })
                         }
                     >
-                        刷新数据
+                        {t('filter.refresh')}
                     </button>
-                    <button className="ghost" onClick={onReset}>重置筛选</button>
+                    <button type="button" className="ghost" onClick={onReset}>{t('filter.reset')}</button>
                 </div>
             </div>
 
-            <div className="chip-row">
-                {chips.length === 0 ? <span className="chip empty">当前无筛选条件</span> : null}
+            <div className="chip-row" aria-live="polite">
+                {chips.length === 0 ? <span className="chip empty" role="status">{t('filter.noChips')}</span> : null}
                 {chips.map((chip) => (
                     <button
+                        type="button"
                         key={`${chip.field}-${chip.value}`}
                         className="chip"
                         onClick={() => removeChip(chip.field, chip.value)}
-                        title="点击移除"
+                        aria-label={`${t('filter.removeChip')}: ${chip.label}`}
+                        title={t('filter.removeChip')}
                     >
                         {chip.label} ×
                     </button>
@@ -129,12 +145,20 @@ export default function FilterBar({
             </div>
 
             <div className="filter-grid">
-                <MultiSelect label="签证类型" values={options.visa_types} selected={filters.visa_types} onPick={(v) => onChange({ ...filters, visa_types: v })} />
-                <label className="field">
-                    <span>月份</span>
+                <MultiSelect
+                    id="filter-visa-types"
+                    label={t('filter.visaTypes')}
+                    values={options.visa_types}
+                    selected={filters.visa_types}
+                    onPick={(v) => onChange({ ...filters, visa_types: v })}
+                />
+                <label className="field" htmlFor="filter-months">
+                    <span id="filter-months-label">{t('filter.months')}</span>
                     <select
+                        id="filter-months"
                         multiple
                         value={filters.months}
+                        aria-labelledby="filter-months-label"
                         onChange={(e) => {
                             const next = Array.from(e.currentTarget.selectedOptions).map((o) => o.value)
                             onChange({ ...filters, months: next })
@@ -145,40 +169,65 @@ export default function FilterBar({
                         ))}
                     </select>
                     <div className="quick-actions">
-                        <button className="ghost" onClick={() => applyRecentMonths(3)}>最近3月</button>
-                        <button className="ghost" onClick={() => applyRecentMonths(6)}>最近6月</button>
-                        <button className="ghost" onClick={() => applyRecentMonths(12)}>最近12月</button>
+                        <button type="button" className="ghost" onClick={() => applyRecentMonths(3)}>{t('filter.quick3')}</button>
+                        <button type="button" className="ghost" onClick={() => applyRecentMonths(6)}>{t('filter.quick6')}</button>
+                        <button type="button" className="ghost" onClick={() => applyRecentMonths(12)}>{t('filter.quick12')}</button>
                     </div>
                 </label>
-                <MultiSelect label="状态" values={options.statuses} selected={filters.statuses} onPick={(v) => onChange({ ...filters, statuses: v })} />
-                <MultiSelect label="签证条目" values={options.entries} selected={filters.entries} onPick={(v) => onChange({ ...filters, entries: v })} />
+                <MultiSelect
+                    id="filter-statuses"
+                    label={t('filter.statuses')}
+                    values={options.statuses}
+                    selected={filters.statuses}
+                    onPick={(v) => onChange({ ...filters, statuses: v })}
+                />
+                <MultiSelect
+                    id="filter-entries"
+                    label={t('filter.entries')}
+                    values={options.entries}
+                    selected={filters.entries}
+                    onPick={(v) => onChange({ ...filters, entries: v })}
+                />
+                {!showConsulateGroups ? (
+                    <MultiSelect
+                        id="filter-consulates"
+                        label={t('filter.consulates')}
+                        values={options.consulates}
+                        selected={filters.consulates}
+                        onPick={(v) => onChange({ ...filters, consulates: v })}
+                    />
+                ) : null}
             </div>
 
-            <div className="consulate-section">
-                <h4>领馆（按国家/地区分组）</h4>
-                <div className="consulate-groups">
-                    {consulateGroups.map((group) => (
-                        <div className="consulate-group" key={group.key}>
-                            <div className="consulate-group-title">
-                                <strong>{group.label}</strong>
-                                <button className="ghost" onClick={() => toggleConsulateGroup(group)}>整组切换</button>
-                            </div>
-                            <div className="consulate-items">
-                                {group.consulates.map((city) => (
-                                    <label key={city} className="consulate-item">
-                                        <input
-                                            type="checkbox"
-                                            checked={filters.consulates.includes(city)}
-                                            onChange={() => onChange({ ...filters, consulates: toggleValue(filters.consulates, city) })}
-                                        />
-                                        <span>{city}</span>
-                                    </label>
-                                ))}
-                            </div>
-                        </div>
-                    ))}
+            {showConsulateGroups ? (
+                <div className="consulate-section">
+                    <h4>{t('filter.groupedConsulates')}</h4>
+                    <div className="consulate-groups">
+                        {consulateGroups.map((group) => (
+                            <fieldset className="consulate-group" key={group.key}>
+                                <div className="consulate-group-title">
+                                    <legend>{group.label}</legend>
+                                    <button type="button" className="ghost" onClick={() => toggleConsulateGroup(group)}>
+                                        {t('filter.toggleGroup')}
+                                    </button>
+                                </div>
+                                <div className="consulate-items">
+                                    {group.consulates.map((city) => (
+                                        <label key={city} className="consulate-item">
+                                            <input
+                                                type="checkbox"
+                                                checked={filters.consulates.includes(city)}
+                                                onChange={() => onChange({ ...filters, consulates: toggleValue(filters.consulates, city) })}
+                                            />
+                                            <span>{city}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </fieldset>
+                        ))}
+                    </div>
                 </div>
-            </div>
+            ) : null}
         </section>
     )
 }

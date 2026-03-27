@@ -1,0 +1,33 @@
+from __future__ import annotations
+
+
+def test_meta_options_and_state(client, seed_cases) -> None:
+    options_res = client.get("/api/v1/meta/options")
+    assert options_res.status_code == 200
+    options_payload = options_res.json()
+    assert "F1" in options_payload["visa_types"]
+    assert "H1B" in options_payload["visa_types"]
+    assert "BeiJing" in options_payload["consulates"]
+
+    state_res = client.get("/api/v1/meta/state")
+    assert state_res.status_code == 200
+    state_payload = state_res.json()
+    assert state_payload["has_data"] is True
+    assert state_payload["current_case_count"] == 4
+    assert state_payload["fetched_month_range"]["latest"] == "2026-03"
+
+
+def test_meta_consulate_groups(client, seed_cases) -> None:
+    response = client.get("/api/v1/meta/consulate-groups")
+    assert response.status_code == 200
+    payload = response.json()
+
+    groups = {item["key"]: item for item in payload["groups"]}
+    assert "china" in groups
+    assert "canada" in groups
+    assert "europe" in groups
+    assert "ungrouped" in groups
+
+    assert "BeiJing" in groups["china"]["consulates"]
+    assert "Toronto" in groups["canada"]["consulates"]
+    assert "MoonBase" in payload["ungrouped"]

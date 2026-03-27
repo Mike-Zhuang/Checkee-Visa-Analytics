@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
     exportCasesUrl,
     exportReportUrl,
@@ -11,6 +12,7 @@ import {
     getSensitivity,
     refreshData
 } from './api'
+import { frontendConfig } from './config'
 import CaseTable from './components/CaseTable'
 import FilterBar from './components/FilterBar'
 import MonthlyChart from './components/MonthlyChart'
@@ -36,11 +38,14 @@ const EMPTY_FILTERS: Filters = {
     months: []
 }
 
+type ErrorKey = 'overview' | 'monthly' | 'sensitivity' | 'metaState' | 'cases' | 'options' | 'groups' | 'refresh'
+
 export default function App() {
+    const { t, i18n } = useTranslation()
     const [initialized, setInitialized] = useState(false)
     const [overviewLoading, setOverviewLoading] = useState(false)
     const [casesLoading, setCasesLoading] = useState(false)
-    const [errors, setErrors] = useState<string[]>([])
+    const [errors, setErrors] = useState<Partial<Record<ErrorKey, string>>>({})
     const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
     const [refreshFromMonth, setRefreshFromMonth] = useState('')
     const [options, setOptions] = useState<OptionsResponse>({
@@ -58,11 +63,30 @@ export default function App() {
     const [cases, setCases] = useState<CaseItem[]>([])
     const [caseTotal, setCaseTotal] = useState(0)
     const [page, setPage] = useState(1)
-    const [pageSize, setPageSize] = useState(50)
+    const [pageSize, setPageSize] = useState(frontendConfig.defaultPageSize)
+
+    const setError = (key: ErrorKey, value: string) => {
+        setErrors((prev) => ({ ...prev, [key]: value }))
+    }
+
+    const clearErrors = (keys: ErrorKey[]) => {
+        setErrors((prev) => {
+            const next = { ...prev }
+            for (const key of keys) {
+                delete next[key]
+            }
+            return next
+        })
+    }
+
+    const formatReason = (reason: unknown): string => {
+        if (reason instanceof Error) return reason.message
+        return String(reason)
+    }
 
     const fetchOverviewBundle = async (activeFilters: Filters) => {
         setOverviewLoading(true)
-        const localErrors: string[] = []
+        clearErrors(['overview', 'monthly', 'sensitivity', 'metaState'])
 
         const [overviewRes, monthlyRes, sensitivityRes, stateRes] = await Promise.allSettled([
             getOverview(activeFilters),
@@ -74,28 +98,27 @@ export default function App() {
         if (overviewRes.status === 'fulfilled') {
             setOverview(overviewRes.value)
         } else {
-            localErrors.push(`概览加载失败: ${overviewRes.reason}`)
+            setError('overview', t('errors.overview', { message: formatReason(overviewRes.reason) }))
         }
 
         if (monthlyRes.status === 'fulfilled') {
             setMonthly(monthlyRes.value)
         } else {
-            localErrors.push(`月度统计加载失败: ${monthlyRes.reason}`)
+            setError('monthly', t('errors.monthly', { message: formatReason(monthlyRes.reason) }))
         }
 
         if (sensitivityRes.status === 'fulfilled') {
             setSensitivity(sensitivityRes.value)
         } else {
-            localErrors.push(`敏感性分析加载失败: ${sensitivityRes.reason}`)
+            setError('sensitivity', t('errors.sensitivity', { message: formatReason(sensitivityRes.reason) }))
         }
 
         if (stateRes.status === 'fulfilled') {
             setMetaState(stateRes.value)
         } else {
-            localErrors.push(`状态信息加载失败: ${stateRes.reason}`)
+            setError('metaState', t('errors.metaState', { message: formatReason(stateRes.reason) }))
         }
 
-        setErrors((prev) => [...prev.filter((x) => !x.includes('概览') && !x.includes('月度') && !x.includes('敏感性') && !x.includes('状态信息')), ...localErrors])
         setOverviewLoading(false)
     }
 
@@ -106,9 +129,9 @@ export default function App() {
             const ca = await getCases(activeFilters, nextPageSize, offset)
             setCases(ca.items)
             setCaseTotal(ca.total)
-            setErrors((prev) => prev.filter((x) => !x.includes('案例明细')))
+            clearErrors(['cases'])
         } catch (e) {
-            setErrors((prev) => [...prev.filter((x) => !x.includes('案例明细')), `案例明细加载失败: ${(e as Error).message}`])
+            setError('cases', t('errors.cases', { message: formatReason(e) }))
         } finally {
             setCasesLoading(false)
         }
@@ -121,28 +144,26 @@ export default function App() {
             getMetaState()
         ])
 
-        const localErrors: string[] = []
+        clearErrors(['options', 'groups'])
         if (optionsRes.status === 'fulfilled') {
             setOptions(optionsRes.value)
         } else {
-            localErrors.push(`筛选项加载失败: ${optionsRes.reason}`)
+            setError('options', t('errors.options', { message: formatReason(optionsRes.reason) }))
         }
 
         if (groupsRes.status === 'fulfilled') {
             setConsulateGroups(groupsRes.value.groups)
         } else {
-            localErrors.push(`领馆分组加载失败: ${groupsRes.reason}`)
+            setError('groups', t('errors.groups', { message: formatReason(groupsRes.reason) }))
         }
 
         if (stateRes.status === 'fulfilled') {
             setMetaState(stateRes.value)
         }
-
-        setErrors((prev) => [...prev.filter((x) => !x.includes('筛选项') && !x.includes('领馆分组')), ...localErrors])
     }
 
     const init = async () => {
-        setErrors([])
+        setErrors({})
         await fetchMetaOptions()
         await fetchOverviewBundle(filters)
         await fetchCasesPage(filters, 1, pageSize)
@@ -174,8 +195,9 @@ export default function App() {
             setPage(1)
             await fetchOverviewBundle(filters)
             await fetchCasesPage(filters, 1, pageSize)
+            clearErrors(['refresh'])
         } catch (e) {
-            setErrors((prev) => [...prev, `刷新失败: ${(e as Error).message}`])
+            setError('refresh', t('errors.refresh', { message: formatReason(e) }))
         }
     }
 
@@ -187,40 +209,79 @@ export default function App() {
     const casesLink = useMemo(() => exportCasesUrl(filters), [filters])
 
     const freshnessHint = useMemo(() => {
-        if (!metaState?.updated_at) return '尚无刷新记录'
+        if (!metaState?.updated_at) return t('app.noRefresh')
         const fresh = metaState.data_freshness_seconds
-        if (fresh == null) return `更新时间: ${metaState.updated_at}`
-        return `更新时间: ${metaState.updated_at}（距今约 ${Math.floor(fresh / 60)} 分钟）`
-    }, [metaState])
+        if (fresh == null) {
+            return t('app.updatedOnly', { time: metaState.updated_at })
+        }
+        return t('app.updatedAgo', { time: metaState.updated_at, minutes: Math.floor(fresh / 60) })
+    }, [metaState, t])
+
+    const languageValue = i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'zh'
+    const errorList = Object.values(errors)
 
     return (
         <main className="app-shell">
             <header className="hero">
                 <div>
-                    <h1>Checkee Visa Analytics</h1>
-                    <p>全签证类型实时分析平台 · 前后端分离 MVP</p>
+                    <h1>{t('app.title')}</h1>
+                    <p>{t('app.subtitle')}</p>
                 </div>
                 <div className="hero-actions">
-                    <a href={reportLink} target="_blank" rel="noreferrer">导出报告</a>
-                    <a href={casesLink} target="_blank" rel="noreferrer">导出CSV</a>
+                    {frontendConfig.enableLanguageSwitch ? (
+                        <label className="lang-switch" htmlFor="lang-select">
+                            <span>{t('app.language')}</span>
+                            <select
+                                id="lang-select"
+                                aria-label={t('app.language')}
+                                value={languageValue}
+                                onChange={(e) => void i18n.changeLanguage(e.currentTarget.value)}
+                            >
+                                <option value="zh">中文</option>
+                                <option value="en">English</option>
+                            </select>
+                        </label>
+                    ) : null}
+                    <a href={reportLink} target="_blank" rel="noreferrer">{t('app.exportReport')}</a>
+                    <a href={casesLink} target="_blank" rel="noreferrer">{t('app.exportCsv')}</a>
                 </div>
             </header>
 
             <section className="meta-strip">
                 <span>{freshnessHint}</span>
-                <span>样本数: {metaState?.current_case_count ?? 0}</span>
-                <span>抓取范围: {metaState?.fetched_month_range?.earliest ?? '-'} ~ {metaState?.fetched_month_range?.latest ?? '-'}</span>
-                {metaState?.truncated_by_limit ? <span className="warn">已触发月份上限: {metaState.month_limit}</span> : null}
+                <span>{t('app.sampleCount', { count: metaState?.current_case_count ?? 0 })}</span>
+                <span>
+                    {t('app.fetchRange', {
+                        earliest: metaState?.fetched_month_range?.earliest ?? t('common.na'),
+                        latest: metaState?.fetched_month_range?.latest ?? t('common.na')
+                    })}
+                </span>
+                {metaState?.truncated_by_limit ? (
+                    <span className="warn">{t('app.monthLimit', { limit: metaState.month_limit })}</span>
+                ) : null}
             </section>
 
-            {errors.length > 0 ? <div className="error-box">{errors.join(' | ')}</div> : null}
-            {(overviewLoading || casesLoading) ? <div className="loading">加载中... {overviewLoading ? '统计模块 ' : ''}{casesLoading ? '明细模块' : ''}</div> : null}
+            {errorList.length > 0 ? (
+                <section className="error-box" role="alert" aria-live="assertive" aria-atomic="true">
+                    {errorList.join(' | ')}
+                </section>
+            ) : null}
+            {(overviewLoading || casesLoading) ? (
+                <div className="loading" role="status" aria-live="polite" aria-busy="true">
+                    {t('app.moduleLoading', {
+                        overview: overviewLoading ? t('app.overviewModule') : '',
+                        cases: casesLoading ? t('app.casesModule') : ''
+                    })}
+                </div>
+            ) : null}
 
             <FilterBar
                 options={options}
                 consulateGroups={consulateGroups}
                 filters={filters}
                 refreshFromMonth={refreshFromMonth}
+                defaultRefreshMonths={frontendConfig.defaultRefreshMonths}
+                showConsulateGroups={frontendConfig.enableConsulateGroups}
                 onRefreshFromMonthChange={setRefreshFromMonth}
                 onChange={onFilterChange}
                 onReset={() => setFilters(EMPTY_FILTERS)}
@@ -234,7 +295,7 @@ export default function App() {
                     setFilters((old) => ({ ...old, months: [month] }))
                 }}
             />
-            <SensitivityTable rows={sensitivity} />
+            {frontendConfig.enableSensitivity ? <SensitivityTable rows={sensitivity} /> : null}
             <CaseTable
                 rows={cases}
                 total={caseTotal}

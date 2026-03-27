@@ -1,22 +1,25 @@
 import type { SensitivityItem } from '../types'
+import { useTranslation } from 'react-i18next'
 
 type Props = { rows: SensitivityItem[] }
 
 export default function SensitivityTable({ rows }: Props) {
+    const { t } = useTranslation()
+
     return (
         <section className="panel">
             <div className="panel-head">
-                <h3>右删失敏感性分析</h3>
-                <p>Conservative / Neutral / Aggressive 三口径区间</p>
+                <h3>{t('sensitivity.title')}</h3>
+                <p>{t('sensitivity.hint')}</p>
             </div>
             <div className="table-wrap">
                 <table>
                     <thead>
                         <tr>
-                            <th>Scenario</th>
-                            <th>Median (days)</th>
-                            <th>P90 (days)</th>
-                            <th>&gt;=90d Ratio</th>
+                            <th>{t('sensitivity.scenario')}</th>
+                            <th>{t('sensitivity.median')}</th>
+                            <th>{t('sensitivity.p90')}</th>
+                            <th>{t('sensitivity.tailRatio')}</th>
                         </tr>
                     </thead>
                     <tbody>

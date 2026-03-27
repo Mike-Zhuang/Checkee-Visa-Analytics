@@ -5,10 +5,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.core.config import API_DEFAULT_REFRESH_MONTHS, API_MAX_REFRESH_MONTHS
+
 
 class RefreshRequest(BaseModel):
     all_months: bool = False
-    months: int = Field(default=6, ge=1, le=240)
+    months: int = Field(default=API_DEFAULT_REFRESH_MONTHS, ge=1, le=API_MAX_REFRESH_MONTHS)
     from_month: str | None = None
 
 
