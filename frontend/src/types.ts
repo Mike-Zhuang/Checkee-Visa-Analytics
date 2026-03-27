@@ -6,6 +6,36 @@ export type OptionsResponse = {
     entries: string[]
 }
 
+export type ConsulateGroup = {
+    key: string
+    label: string
+    consulates: string[]
+}
+
+export type ConsulateGroupsResponse = {
+    groups: ConsulateGroup[]
+    ungrouped: string[]
+}
+
+export type MetaState = {
+    fetched_months: string[]
+    fetched_month_count: number
+    total_cases: number
+    all_months: boolean
+    months_arg: number
+    from_month: string | null
+    truncated_by_limit: boolean
+    month_limit: number
+    updated_at: string
+    has_data: boolean
+    current_case_count: number
+    data_freshness_seconds: number | null
+    fetched_month_range: {
+        latest: string | null
+        earliest: string | null
+    }
+}
+
 export type OverviewStats = {
     total_cases: number
     finalized_cases: number
@@ -69,4 +99,10 @@ export type Filters = {
     statuses: string[]
     entries: string[]
     months: string[]
+}
+
+export type RefreshPayload = {
+    all_months?: boolean
+    months?: number
+    from_month?: string | null
 }

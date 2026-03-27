@@ -17,6 +17,8 @@ class RefreshResponse(BaseModel):
     message: str
     fetched_months: list[str]
     total_cases: int
+    truncated_by_limit: bool = False
+    month_limit: int
     generated_at: datetime
 
 
@@ -64,6 +66,17 @@ class OptionsResponse(BaseModel):
     consulates: list[str]
     statuses: list[str]
     entries: list[str]
+
+
+class ConsulateGroup(BaseModel):
+    key: str
+    label: str
+    consulates: list[str]
+
+
+class ConsulateGroupsResponse(BaseModel):
+    groups: list[ConsulateGroup]
+    ungrouped: list[str]
 
 
 class HealthResponse(BaseModel):

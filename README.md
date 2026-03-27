@@ -43,6 +43,8 @@ Checkee Visa Analytics 是一个面向签证申请数据分析的全栈项目，
 
 - 数据抓取
   - 从公开页面抓取月度案例数据
+  - 支持指定起始月份抓取历史数据（from_month）
+  - 支持抓取月份安全上限保护与截断标识
   - 内置重试机制与基础容错逻辑
 - 数据分析
   - 概览统计：样本量、成熟度、中位数、P90、长尾占比
@@ -50,6 +52,10 @@ Checkee Visa Analytics 是一个面向签证申请数据分析的全栈项目，
   - 敏感性分析：Conservative / Neutral / Aggressive 三口径
 - 前端交互
   - 多维筛选（月份、签证类型、领馆、状态、New/Renewal）
+  - 领馆按国家/地区分组筛选（后端统一分组配置）
+  - 筛选条件标签可视化、最近 N 月快捷选择
+  - 案例明细分页与空态提示
+  - 局部容错加载（单接口失败不拖垮整页）
   - 趋势图 + 明细表联动
   - 一键导出 Markdown 报告与 CSV
 
@@ -128,8 +134,9 @@ npm run dev
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/v1/health` | 健康检查 |
-| POST | `/api/v1/tasks/refresh` | 触发抓取刷新 |
+| POST | `/api/v1/tasks/refresh` | 触发抓取刷新（支持 from_month） |
 | GET | `/api/v1/meta/options` | 获取筛选项 |
+| GET | `/api/v1/meta/consulate-groups` | 获取领馆国家/地区分组 |
 | GET | `/api/v1/meta/state` | 获取刷新状态 |
 | GET | `/api/v1/cases` | 获取案例明细（支持筛选/分页） |
 | GET | `/api/v1/stats/overview` | 获取总体统计 |
@@ -164,6 +171,19 @@ npm run dev
 - 数据来源于公开页面，仅用于学习与研究。
 - 请遵守目标站点的服务条款与访问策略。
 - 不建议将含敏感信息的原始数据直接公开提交到仓库。
+
+## 刷新参数说明
+
+调用 POST /api/v1/tasks/refresh 时可使用：
+
+- all_months: 是否抓取全部可见月份
+- months: 最近 N 月抓取窗口（默认 6）
+- from_month: 指定起始月份（格式 YYYY-MM），例如 2025-01
+
+说明：
+
+- from_month 优先于 months。
+- 后端会应用月份安全上限保护，并在响应中返回 truncated_by_limit 与 month_limit。
 
 ## 路线图
 

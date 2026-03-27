@@ -3,6 +3,8 @@ import {
     exportCasesUrl,
     exportReportUrl,
     getCases,
+    getConsulateGroups,
+    getMetaState,
     getMonthly,
     getOptions,
     getOverview,
@@ -14,7 +16,17 @@ import FilterBar from './components/FilterBar'
 import MonthlyChart from './components/MonthlyChart'
 import SensitivityTable from './components/SensitivityTable'
 import StatCards from './components/StatCards'
-import type { CaseItem, Filters, MonthlyItem, OptionsResponse, OverviewStats, SensitivityItem } from './types'
+import type {
+    CaseItem,
+    ConsulateGroup,
+    Filters,
+    MetaState,
+    MonthlyItem,
+    OptionsResponse,
+    OverviewStats,
+    RefreshPayload,
+    SensitivityItem
+} from './types'
 
 const EMPTY_FILTERS: Filters = {
     visa_types: [],
@@ -25,9 +37,12 @@ const EMPTY_FILTERS: Filters = {
 }
 
 export default function App() {
-    const [loading, setLoading] = useState(false)
-    const [error, setError] = useState('')
+    const [initialized, setInitialized] = useState(false)
+    const [overviewLoading, setOverviewLoading] = useState(false)
+    const [casesLoading, setCasesLoading] = useState(false)
+    const [errors, setErrors] = useState<string[]>([])
     const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
+    const [refreshFromMonth, setRefreshFromMonth] = useState('')
     const [options, setOptions] = useState<OptionsResponse>({
         months: [],
         visa_types: [],
@@ -35,46 +50,103 @@ export default function App() {
         statuses: [],
         entries: []
     })
+    const [consulateGroups, setConsulateGroups] = useState<ConsulateGroup[]>([])
+    const [metaState, setMetaState] = useState<MetaState | null>(null)
     const [overview, setOverview] = useState<OverviewStats | null>(null)
     const [monthly, setMonthly] = useState<MonthlyItem[]>([])
     const [sensitivity, setSensitivity] = useState<SensitivityItem[]>([])
     const [cases, setCases] = useState<CaseItem[]>([])
     const [caseTotal, setCaseTotal] = useState(0)
+    const [page, setPage] = useState(1)
+    const [pageSize, setPageSize] = useState(50)
 
-    const fetchAll = async () => {
-        setLoading(true)
-        setError('')
+    const fetchOverviewBundle = async (activeFilters: Filters) => {
+        setOverviewLoading(true)
+        const localErrors: string[] = []
+
+        const [overviewRes, monthlyRes, sensitivityRes, stateRes] = await Promise.allSettled([
+            getOverview(activeFilters),
+            getMonthly(activeFilters),
+            getSensitivity(activeFilters),
+            getMetaState()
+        ])
+
+        if (overviewRes.status === 'fulfilled') {
+            setOverview(overviewRes.value)
+        } else {
+            localErrors.push(`概览加载失败: ${overviewRes.reason}`)
+        }
+
+        if (monthlyRes.status === 'fulfilled') {
+            setMonthly(monthlyRes.value)
+        } else {
+            localErrors.push(`月度统计加载失败: ${monthlyRes.reason}`)
+        }
+
+        if (sensitivityRes.status === 'fulfilled') {
+            setSensitivity(sensitivityRes.value)
+        } else {
+            localErrors.push(`敏感性分析加载失败: ${sensitivityRes.reason}`)
+        }
+
+        if (stateRes.status === 'fulfilled') {
+            setMetaState(stateRes.value)
+        } else {
+            localErrors.push(`状态信息加载失败: ${stateRes.reason}`)
+        }
+
+        setErrors((prev) => [...prev.filter((x) => !x.includes('概览') && !x.includes('月度') && !x.includes('敏感性') && !x.includes('状态信息')), ...localErrors])
+        setOverviewLoading(false)
+    }
+
+    const fetchCasesPage = async (activeFilters: Filters, nextPage: number, nextPageSize: number) => {
+        setCasesLoading(true)
         try {
-            const [ov, mo, se, ca] = await Promise.all([
-                getOverview(filters),
-                getMonthly(filters),
-                getSensitivity(filters),
-                getCases(filters, 300)
-            ])
-            setOverview(ov)
-            setMonthly(mo)
-            setSensitivity(se)
+            const offset = (nextPage - 1) * nextPageSize
+            const ca = await getCases(activeFilters, nextPageSize, offset)
             setCases(ca.items)
             setCaseTotal(ca.total)
+            setErrors((prev) => prev.filter((x) => !x.includes('案例明细')))
         } catch (e) {
-            setError((e as Error).message)
+            setErrors((prev) => [...prev.filter((x) => !x.includes('案例明细')), `案例明细加载失败: ${(e as Error).message}`])
         } finally {
-            setLoading(false)
+            setCasesLoading(false)
         }
     }
 
-    const init = async () => {
-        setLoading(true)
-        setError('')
-        try {
-            const op = await getOptions()
-            setOptions(op)
-            await fetchAll()
-        } catch (e) {
-            setError((e as Error).message)
-        } finally {
-            setLoading(false)
+    const fetchMetaOptions = async () => {
+        const [optionsRes, groupsRes, stateRes] = await Promise.allSettled([
+            getOptions(),
+            getConsulateGroups(),
+            getMetaState()
+        ])
+
+        const localErrors: string[] = []
+        if (optionsRes.status === 'fulfilled') {
+            setOptions(optionsRes.value)
+        } else {
+            localErrors.push(`筛选项加载失败: ${optionsRes.reason}`)
         }
+
+        if (groupsRes.status === 'fulfilled') {
+            setConsulateGroups(groupsRes.value.groups)
+        } else {
+            localErrors.push(`领馆分组加载失败: ${groupsRes.reason}`)
+        }
+
+        if (stateRes.status === 'fulfilled') {
+            setMetaState(stateRes.value)
+        }
+
+        setErrors((prev) => [...prev.filter((x) => !x.includes('筛选项') && !x.includes('领馆分组')), ...localErrors])
+    }
+
+    const init = async () => {
+        setErrors([])
+        await fetchMetaOptions()
+        await fetchOverviewBundle(filters)
+        await fetchCasesPage(filters, 1, pageSize)
+        setInitialized(true)
     }
 
     useEffect(() => {
@@ -83,28 +155,43 @@ export default function App() {
     }, [])
 
     useEffect(() => {
-        if (!options.months.length) return
-        void fetchAll()
+        if (!initialized) return
+        setPage(1)
+        void fetchOverviewBundle(filters)
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filters])
 
-    const onRefresh = async () => {
-        setLoading(true)
-        setError('')
+    useEffect(() => {
+        if (!initialized) return
+        void fetchCasesPage(filters, page, pageSize)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filters, page, pageSize, initialized])
+
+    const onRefresh = async (payload: RefreshPayload) => {
         try {
-            await refreshData(false, 6)
-            const op = await getOptions()
-            setOptions(op)
-            await fetchAll()
+            await refreshData(payload)
+            await fetchMetaOptions()
+            setPage(1)
+            await fetchOverviewBundle(filters)
+            await fetchCasesPage(filters, 1, pageSize)
         } catch (e) {
-            setError((e as Error).message)
-        } finally {
-            setLoading(false)
+            setErrors((prev) => [...prev, `刷新失败: ${(e as Error).message}`])
         }
+    }
+
+    const onFilterChange = (next: Filters) => {
+        setFilters(next)
     }
 
     const reportLink = useMemo(() => exportReportUrl(filters), [filters])
     const casesLink = useMemo(() => exportCasesUrl(filters), [filters])
+
+    const freshnessHint = useMemo(() => {
+        if (!metaState?.updated_at) return '尚无刷新记录'
+        const fresh = metaState.data_freshness_seconds
+        if (fresh == null) return `更新时间: ${metaState.updated_at}`
+        return `更新时间: ${metaState.updated_at}（距今约 ${Math.floor(fresh / 60)} 分钟）`
+    }, [metaState])
 
     return (
         <main className="app-shell">
@@ -119,13 +206,23 @@ export default function App() {
                 </div>
             </header>
 
-            {error ? <div className="error-box">{error}</div> : null}
-            {loading ? <div className="loading">加载中...</div> : null}
+            <section className="meta-strip">
+                <span>{freshnessHint}</span>
+                <span>样本数: {metaState?.current_case_count ?? 0}</span>
+                <span>抓取范围: {metaState?.fetched_month_range?.earliest ?? '-'} ~ {metaState?.fetched_month_range?.latest ?? '-'}</span>
+                {metaState?.truncated_by_limit ? <span className="warn">已触发月份上限: {metaState.month_limit}</span> : null}
+            </section>
+
+            {errors.length > 0 ? <div className="error-box">{errors.join(' | ')}</div> : null}
+            {(overviewLoading || casesLoading) ? <div className="loading">加载中... {overviewLoading ? '统计模块 ' : ''}{casesLoading ? '明细模块' : ''}</div> : null}
 
             <FilterBar
                 options={options}
+                consulateGroups={consulateGroups}
                 filters={filters}
-                onChange={setFilters}
+                refreshFromMonth={refreshFromMonth}
+                onRefreshFromMonthChange={setRefreshFromMonth}
+                onChange={onFilterChange}
                 onReset={() => setFilters(EMPTY_FILTERS)}
                 onRefresh={onRefresh}
             />
@@ -138,7 +235,17 @@ export default function App() {
                 }}
             />
             <SensitivityTable rows={sensitivity} />
-            <CaseTable rows={cases} total={caseTotal} />
+            <CaseTable
+                rows={cases}
+                total={caseTotal}
+                page={page}
+                pageSize={pageSize}
+                onPageChange={(next) => setPage(Math.max(1, next))}
+                onPageSizeChange={(size) => {
+                    setPage(1)
+                    setPageSize(size)
+                }}
+            />
         </main>
     )
 }

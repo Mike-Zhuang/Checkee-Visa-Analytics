@@ -252,6 +252,40 @@ def options(rows: list[dict[str, str]]) -> dict[str, list[str]]:
     }
 
 
+def consulate_groups(rows: list[dict[str, str]]) -> dict[str, Any]:
+    all_consulates = sorted({r.get("consulate") or "" for r in rows if r.get("consulate")})
+
+    rules: list[tuple[str, str, set[str]]] = [
+        (
+            "china",
+            "中国",
+            {"BeiJing", "ShangHai", "GuangZhou", "ShenYang", "WuHan", "HongKong"},
+        ),
+        (
+            "canada",
+            "加拿大",
+            {"Toronto", "Ottawa", "Vancouver", "Calgary"},
+        ),
+        ("europe", "欧洲", {"Europe"}),
+        ("other", "其他", {"Others"}),
+    ]
+
+    seen: set[str] = set()
+    groups: list[dict[str, Any]] = []
+    for key, label, pool in rules:
+        matched = sorted([c for c in all_consulates if c in pool])
+        if not matched:
+            continue
+        seen.update(matched)
+        groups.append({"key": key, "label": label, "consulates": matched})
+
+    ungrouped = sorted([c for c in all_consulates if c not in seen])
+    if ungrouped:
+        groups.append({"key": "ungrouped", "label": "未分组", "consulates": ungrouped})
+
+    return {"groups": groups, "ungrouped": ungrouped}
+
+
 def markdown_report(rows: list[dict[str, str]]) -> str:
     ov = overview_stats(rows)
     monthly = monthly_stats(rows)

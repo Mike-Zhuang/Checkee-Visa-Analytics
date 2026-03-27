@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 from app.core.config import (
     CHECKEE_BASE_URL,
     FETCH_DELAY_SECONDS,
+    MAX_FETCH_MONTHS,
     REQUEST_RETRIES,
     REQUEST_TIMEOUT_SECONDS,
     RETRY_SLEEP_SECONDS,
@@ -53,6 +54,10 @@ def _parse_date(value: str) -> date | None:
 def _month_key(value: str) -> tuple[int, int]:
     y, m = value.split("-")
     return int(y), int(m)
+
+
+def _is_month_token(value: str) -> bool:
+    return re.fullmatch(r"\d{4}-\d{2}", value) is not None
 
 
 def _session() -> requests.Session:
@@ -101,12 +106,20 @@ def _extract_months(index_html: str) -> list[str]:
     return sorted(set(months), key=_month_key, reverse=True)
 
 
-def _pick_months(months: list[str], all_months: bool, recent_n: int, from_month: str | None) -> list[str]:
+def _pick_months(months: list[str], all_months: bool, recent_n: int, from_month: str | None) -> tuple[list[str], bool]:
+    if from_month and not _is_month_token(from_month):
+        raise ValueError("from_month must be in YYYY-MM format")
+
     if all_months:
-        return months
-    if from_month:
-        return [m for m in months if _month_key(m) >= _month_key(from_month)]
-    return months[: max(1, recent_n)]
+        picked = months
+    elif from_month:
+        picked = [m for m in months if _month_key(m) >= _month_key(from_month)]
+    else:
+        picked = months[: max(1, recent_n)]
+
+    if len(picked) > MAX_FETCH_MONTHS:
+        return picked[:MAX_FETCH_MONTHS], True
+    return picked, False
 
 
 def _parse_case_number(update_href: str) -> str:
@@ -206,13 +219,22 @@ def _dedupe(rows: list[CaseRow]) -> list[CaseRow]:
     return list(latest.values())
 
 
-def fetch_cases(all_months: bool = False, months: int = 6, from_month: str | None = None) -> tuple[list[CaseRow], list[str]]:
+def fetch_cases(
+    all_months: bool = False,
+    months: int = 6,
+    from_month: str | None = None,
+) -> tuple[list[CaseRow], list[str], bool]:
     session = _session()
     observation_date = date.today()
 
     index_html = _fetch_html(session, CHECKEE_BASE_URL)
     all_available_months = _extract_months(index_html)
-    target_months = _pick_months(all_available_months, all_months=all_months, recent_n=months, from_month=from_month)
+    target_months, truncated_by_limit = _pick_months(
+        all_available_months,
+        all_months=all_months,
+        recent_n=months,
+        from_month=from_month,
+    )
 
     rows: list[CaseRow] = []
     for idx, month in enumerate(target_months):
@@ -222,4 +244,4 @@ def fetch_cases(all_months: bool = False, months: int = 6, from_month: str | Non
         if idx < len(target_months) - 1:
             time.sleep(FETCH_DELAY_SECONDS)
 
-    return _dedupe(rows), target_months
+    return _dedupe(rows), target_months, truncated_by_limit

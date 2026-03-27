@@ -6,7 +6,13 @@ from io import StringIO
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
-from app.core.schemas import HealthResponse, OptionsResponse, RefreshRequest, RefreshResponse
+from app.core.schemas import (
+    ConsulateGroupsResponse,
+    HealthResponse,
+    OptionsResponse,
+    RefreshRequest,
+    RefreshResponse,
+)
 from app.services.data_service import service
 
 router = APIRouter(prefix="/api/v1", tags=["checkee"])
@@ -54,6 +60,8 @@ def refresh(req: RefreshRequest) -> RefreshResponse:
     try:
         result = service.refresh(all_months=req.all_months, months=req.months, from_month=req.from_month)
         return RefreshResponse(**result)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -69,6 +77,15 @@ def options() -> OptionsResponse:
 @router.get("/meta/state")
 def state() -> dict:
     return service.get_meta()
+
+
+@router.get("/meta/consulate-groups", response_model=ConsulateGroupsResponse)
+def consulate_groups() -> ConsulateGroupsResponse:
+    rows = service.get_cases()
+    if not rows:
+        return ConsulateGroupsResponse(groups=[], ungrouped=[])
+    grouped = service.get_consulate_groups(rows)
+    return ConsulateGroupsResponse(**grouped)
 
 
 @router.get("/cases")

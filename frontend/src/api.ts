@@ -1,6 +1,16 @@
-import type { CaseItem, Filters, MonthlyItem, OptionsResponse, OverviewStats, SensitivityItem } from './types'
+import type {
+    CaseItem,
+    ConsulateGroupsResponse,
+    Filters,
+    MetaState,
+    MonthlyItem,
+    OptionsResponse,
+    OverviewStats,
+    RefreshPayload,
+    SensitivityItem
+} from './types'
 
-const API_BASE = 'http://127.0.0.1:8000/api/v1'
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://127.0.0.1:8000/api/v1'
 
 function paramsFromFilters(filters: Filters): URLSearchParams {
     const params = new URLSearchParams()
@@ -29,15 +39,23 @@ export async function getOptions(): Promise<OptionsResponse> {
     return fetchJson<OptionsResponse>('/meta/options')
 }
 
-export async function refreshData(allMonths = false, months = 6): Promise<void> {
+export async function refreshData(payload: RefreshPayload = { all_months: false, months: 6 }): Promise<void> {
     const res = await fetch(`${API_BASE}/tasks/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ all_months: allMonths, months })
+        body: JSON.stringify(payload)
     })
     if (!res.ok) {
         throw new Error(`refresh failed: ${res.status}`)
     }
+}
+
+export async function getMetaState(): Promise<MetaState> {
+    return fetchJson<MetaState>('/meta/state')
+}
+
+export async function getConsulateGroups(): Promise<ConsulateGroupsResponse> {
+    return fetchJson<ConsulateGroupsResponse>('/meta/consulate-groups')
 }
 
 export async function getOverview(filters: Filters): Promise<OverviewStats> {
@@ -57,9 +75,10 @@ export async function getSensitivity(filters: Filters): Promise<SensitivityItem[
     return data.items
 }
 
-export async function getCases(filters: Filters, limit = 200): Promise<{ total: number; items: CaseItem[] }> {
+export async function getCases(filters: Filters, limit = 200, offset = 0): Promise<{ total: number; items: CaseItem[] }> {
     const params = paramsFromFilters(filters)
     params.set('limit', String(limit))
+    params.set('offset', String(offset))
     return fetchJson<{ total: number; limit: number; offset: number; items: CaseItem[] }>(`/cases?${params.toString()}`)
 }
 
