@@ -24,7 +24,7 @@
         {
             "label": "Frontend: Run H5",
             "type": "shell",
-            "command": "npm",
+            "command": "pnpm",
             "args": [
                 "run",
                 "dev"

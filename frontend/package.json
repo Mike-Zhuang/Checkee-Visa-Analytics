@@ -1,8 +1,14 @@
 {
     "name": "checkee-analytics-frontend",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "private": true,
     "type": "module",
+    "packageManager": "pnpm@10.12.4",
+    "engines": {
+        "node": ">=18",
+        "npm": ">=9",
+        "pnpm": ">=9"
+    },
     "scripts": {
         "dev": "vite",
         "build": "tsc -b && vite build",

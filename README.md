@@ -84,7 +84,25 @@ Checkee Visa Analytics 是一个面向签证申请数据分析的全栈项目，
 
 - Python 3.11+
 - Node.js 18+
-- npm 9+
+- npm 9+（兼容）
+- pnpm 9+（推荐）
+
+### 包管理器说明
+
+- 推荐使用 pnpm（CI 主链路也使用 pnpm）。
+- 保留 npm 兼容链路，便于已有环境平滑迁移。
+- 首次使用建议启用 Corepack：
+
+```bash
+corepack enable
+corepack prepare pnpm@10.12.4 --activate
+```
+
+若本机没有 `corepack` 命令，可使用：
+
+```bash
+npm install -g pnpm@10
+```
 
 ### 1. 安装后端依赖
 
@@ -93,6 +111,13 @@ Checkee Visa Analytics 是一个面向签证申请数据分析的全栈项目，
 ```
 
 ### 2. 安装前端依赖
+
+```bash
+cd frontend
+pnpm install
+```
+
+如需使用 npm：
 
 ```bash
 cd frontend
@@ -107,6 +132,13 @@ cd backend
 ```
 
 ### 4. 启动前端
+
+```bash
+cd frontend
+pnpm run dev
+```
+
+如需使用 npm：
 
 ```bash
 cd frontend
@@ -185,10 +217,24 @@ cd backend
 
 ```bash
 cd frontend
+pnpm run test
+```
+
+如需使用 npm：
+
+```bash
+cd frontend
 npm run test
 ```
 
 ### 前端覆盖率（含阈值门禁）
+
+```bash
+cd frontend
+pnpm run test:coverage
+```
+
+如需使用 npm：
 
 ```bash
 cd frontend
@@ -206,6 +252,13 @@ npm run test:coverage
 
 ```bash
 cd frontend
+pnpm run build
+```
+
+如需使用 npm：
+
+```bash
+cd frontend
 npm run build
 ```
 
@@ -214,8 +267,8 @@ npm run build
 GitHub Actions 工作流位于 `.github/workflows/ci.yml`，在 `push`/`pull_request` 时执行：
 
 - backend: `pytest`
-- frontend: `npm run test:coverage`
-- frontend: `npm run build`
+- frontend（pnpm 主门禁）: `pnpm run test:coverage` + `pnpm run build`
+- frontend（npm 兼容 smoke）: `npm run build`
 
 ## 国际化与可访问性
 

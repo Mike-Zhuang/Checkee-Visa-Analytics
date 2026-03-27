@@ -43,6 +43,14 @@ cd backend
 
 ```bash
 cd frontend
+pnpm install
+pnpm run dev
+```
+
+如需使用 npm：
+
+```bash
+cd frontend
 npm ci
 npm run dev
 ```
@@ -74,6 +82,13 @@ cd backend
 
 ```bash
 cd frontend
+pnpm run test
+```
+
+如需使用 npm：
+
+```bash
+cd frontend
 npm run test
 ```
 
@@ -81,10 +96,24 @@ npm run test
 
 ```bash
 cd frontend
+pnpm run test:coverage
+```
+
+如需使用 npm：
+
+```bash
+cd frontend
 npm run test:coverage
 ```
 
 前端构建：
+
+```bash
+cd frontend
+pnpm run build
+```
+
+如需使用 npm：
 
 ```bash
 cd frontend
@@ -99,6 +128,7 @@ npm run build
 
 - backend-tests
 - frontend-tests-build
+- frontend-npm-compat
 
 ## 3. 生成首发提交
 
