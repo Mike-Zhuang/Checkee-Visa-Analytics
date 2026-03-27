@@ -88,6 +88,12 @@ def _is_finalized(row: dict[str, Any]) -> bool:
     return str(event).strip() == "1"
 
 
+def _safe_round(value: float, digits: int = 2, default: float = 0.0) -> float:
+    if math.isnan(value) or math.isinf(value):
+        return default
+    return round(value, digits)
+
+
 def filter_rows(
     rows: list[dict[str, str]],
     visa_types: set[str] | None = None,
@@ -182,15 +188,15 @@ def overview_stats(rows: list[dict[str, str]]) -> dict[str, Any]:
         "finalized_cases": finalized_n,
         "pending_cases": pending_n,
         "maturity_ratio": round(finalized_n / total, 4) if total else 0.0,
-        "median_days": round(m_point, 2),
-        "median_ci_low": round(m_lo, 2),
-        "median_ci_high": round(m_hi, 2),
-        "p90_days": round(p90_point, 2),
-        "p90_ci_low": round(p90_lo, 2),
-        "p90_ci_high": round(p90_hi, 2),
-        "mean_days": round(s["mean"], 2),
-        "iqr_days": round(s["iqr"], 2),
-        "std_days": round(s["std"], 2),
+        "median_days": _safe_round(m_point),
+        "median_ci_low": _safe_round(m_lo),
+        "median_ci_high": _safe_round(m_hi),
+        "p90_days": _safe_round(p90_point),
+        "p90_ci_low": _safe_round(p90_lo),
+        "p90_ci_high": _safe_round(p90_hi),
+        "mean_days": _safe_round(s["mean"]),
+        "iqr_days": _safe_round(s["iqr"]),
+        "std_days": _safe_round(s["std"]),
         "long_tail_90plus_ratio": round(tail_ratio, 4) if not math.isnan(tail_ratio) else 0.0,
     }
 
