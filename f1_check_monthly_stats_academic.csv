@@ -1,0 +1,6 @@
+submit_month,total_cases,event_cases,censored_cases,maturity_ratio,pending_ratio,finalized_median_days,finalized_median_ci_low,finalized_median_ci_high,finalized_p90_days,finalized_p90_ci_low,finalized_p90_ci_high,km_median_days,long_tail_90plus_ratio,pending_observed_median_days
+2025-11,50,36,14,0.72,0.28,104.5,101.0,111.0,117.5,112.0,131.0,111.0,0.9167,138.5
+2025-12,105,60,45,0.5714,0.4286,87.0,79.0,89.01,97.2,92.0,102.0,95.0,0.3667,102
+2026-01,25,13,12,0.52,0.48,59,54.0,64.0,64.0,60.8,76.0,64.0,0.0,69.0
+2026-02,20,8,12,0.4,0.6,19.5,1.0,36.0,42.3,20.59,43.0,43.0,0.0,42.0
+2026-03,16,6,10,0.375,0.625,7.5,2.5,19.5,19.5,7.5,23.0,23.0,0.0,17.5
