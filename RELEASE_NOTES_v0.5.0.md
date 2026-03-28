@@ -1,4 +1,4 @@
-# Release Notes v0.4.0
+# Release Notes v0.5.0
 
 发布日期：2026-03-28
 
@@ -60,11 +60,10 @@
 
 ## 版本信息
 
-- 前端 package.json 版本更新至 0.4.0。
-- 后端默认 CHECKEE_APP_VERSION 更新至 0.4.0。
-- 部署环境模板中的 CHECKEE_APP_VERSION 同步更新至 0.4.0。
+- 前端 package.json 版本更新至 0.5.0。
+- 后端默认 CHECKEE_APP_VERSION 更新至 0.5.0。
 
 ## 升级提示
 
-- 生产环境部署前，请同步更新后端环境变量中的 CHECKEE_APP_VERSION=0.4.0。
+- 生产环境部署前，请同步更新后端环境变量中的 CHECKEE_APP_VERSION=0.5.0。
 - 建议部署后先执行一次管理员登录与专业归类面板冒烟检查，再对外开放页面访问。
