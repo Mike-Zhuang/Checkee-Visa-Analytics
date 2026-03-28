@@ -39,7 +39,7 @@ describe('CaseTable', () => {
             />
         )
 
-        expect(screen.getByText('当前筛选条件下无案例数据，请调整筛选或先刷新抓取。')).toBeInTheDocument()
+        expect(screen.getByText('暂时没有匹配的案例')).toBeInTheDocument()
     })
 
     it('点击下一页会触发 onPageChange', async () => {

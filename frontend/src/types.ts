@@ -62,6 +62,7 @@ export type MonthlyItem = {
     clear_cases: number
     reject_cases: number
     pending_cases: number
+    clear_ratio: number
     pending_ratio: number
     maturity_ratio: number
     finalized_count: number

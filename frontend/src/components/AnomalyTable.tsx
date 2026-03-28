@@ -9,6 +9,12 @@ type Props = {
 export default function AnomalyTable({ rows }: Props) {
     const { t } = useTranslation()
 
+    const reasonLabel = (reason: string): string => {
+        if (reason === 'finalized_long_wait') return t('anomaly.reasonFinalizedLongWait')
+        if (reason === 'pending_long_wait') return t('anomaly.reasonPendingLongWait')
+        return reason
+    }
+
     return (
         <section className="panel">
             <div className="panel-head">
@@ -16,7 +22,10 @@ export default function AnomalyTable({ rows }: Props) {
                 <p>{t('anomaly.hint')}</p>
             </div>
             {rows.length === 0 ? (
-                <div className="empty-box">{t('anomaly.empty')}</div>
+                <div className="empty-box">
+                    <strong>{t('anomaly.emptyTitle')}</strong>
+                    <p>{t('anomaly.empty')}</p>
+                </div>
             ) : (
                 <div className="table-wrap">
                     <table>
@@ -38,7 +47,7 @@ export default function AnomalyTable({ rows }: Props) {
                                     <td>{row.consulate}</td>
                                     <td>{row.status}</td>
                                     <td>{row.days}</td>
-                                    <td>{row.reason}</td>
+                                    <td>{reasonLabel(row.reason)}</td>
                                 </tr>
                             ))}
                         </tbody>

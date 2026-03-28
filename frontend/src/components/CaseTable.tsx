@@ -23,7 +23,13 @@ export default function CaseTable({ rows, total, page, pageSize, onPageChange, o
                 <p>{t('cases.summary', { count: rows.length, total })}</p>
             </div>
 
-            {total === 0 ? <div className="empty-box">{t('cases.empty')}</div> : null}
+            {total === 0 ? (
+                <div className="empty-box">
+                    <strong>{t('cases.emptyTitle')}</strong>
+                    <p>{t('cases.empty')}</p>
+                    <p>{t('cases.emptyAction')}</p>
+                </div>
+            ) : null}
 
             <div className="table-wrap">
                 <table>

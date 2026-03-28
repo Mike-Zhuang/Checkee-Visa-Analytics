@@ -150,6 +150,7 @@ def monthly_stats(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
                 "clear_cases": clear_n,
                 "reject_cases": reject_n,
                 "pending_cases": pending_n,
+                "clear_ratio": round(clear_n / total_n, 4) if total_n else 0.0,
                 "pending_ratio": round(pending_n / total_n, 4) if total_n else 0.0,
                 "maturity_ratio": round((clear_n + reject_n) / total_n, 4) if total_n else 0.0,
                 "finalized_count": int(s["count"]),

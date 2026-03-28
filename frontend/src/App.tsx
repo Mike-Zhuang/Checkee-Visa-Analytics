@@ -73,6 +73,8 @@ export default function App() {
     const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
     const [refreshFromMonth, setRefreshFromMonth] = useState('')
     const [refreshSources, setRefreshSources] = useState<string[]>(['monthly_track'])
+    const [isRefreshing, setIsRefreshing] = useState(false)
+    const [refreshFeedback, setRefreshFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
     const [options, setOptions] = useState<OptionsResponse>({
         months: [],
         visa_types: [],
@@ -110,8 +112,22 @@ export default function App() {
     }
 
     const formatReason = (reason: unknown): string => {
-        if (reason instanceof Error) return reason.message
-        return String(reason)
+        if (!(reason instanceof Error)) {
+            return t('errors.reason.temporary')
+        }
+
+        const message = reason.message.toLowerCase()
+        if (message.includes('timeout')) return t('errors.reason.timeout')
+        if (message.includes('failed to fetch') || message.includes('network')) return t('errors.reason.network')
+        if (message.includes('failed: 5')) return t('errors.reason.serverBusy')
+        if (message.includes('failed: 4')) return t('errors.reason.badRequest')
+        return t('errors.reason.temporary')
+    }
+
+    const sourceName = (source: string): string => {
+        if (source === 'monthly_track') return t('filter.sourceMonthlyShort')
+        if (source === 'latest_snapshot') return t('filter.sourceLatestShort')
+        return source
     }
 
     const fetchOverviewBundle = async (activeFilters: Filters) => {
@@ -264,6 +280,8 @@ export default function App() {
     }, [filters, page, pageSize, initialized])
 
     const onRefresh = async (payload: RefreshPayload) => {
+        setIsRefreshing(true)
+        setRefreshFeedback(null)
         try {
             await refreshData(payload)
             await fetchMetaOptions()
@@ -271,8 +289,12 @@ export default function App() {
             await fetchOverviewBundle(filters)
             await fetchCasesPage(filters, 1, pageSize)
             clearErrors(['refresh'])
+            setRefreshFeedback({ kind: 'success', message: t('filter.refreshSuccess') })
         } catch (e) {
             setError('refresh', t('errors.refresh', { message: formatReason(e) }))
+            setRefreshFeedback({ kind: 'error', message: t('filter.refreshFailedHint') })
+        } finally {
+            setIsRefreshing(false)
         }
     }
 
@@ -323,29 +345,50 @@ export default function App() {
             </header>
 
             <section className="meta-strip">
-                <span>{freshnessHint}</span>
-                <span>{t('app.sampleCount', { count: metaState?.current_case_count ?? 0 })}</span>
-                <span>
-                    {t('app.fetchRange', {
-                        earliest: metaState?.fetched_month_range?.earliest ?? t('common.na'),
-                        latest: metaState?.fetched_month_range?.latest ?? t('common.na')
-                    })}
-                </span>
-                <span>
-                    {t('app.selectedSources', {
-                        value: (metaState?.selected_sources && metaState.selected_sources.length > 0)
-                            ? metaState.selected_sources.join(', ')
-                            : t('common.na')
-                    })}
-                </span>
-                {metaState?.truncated_by_limit ? (
-                    <span className="warn">{t('app.monthLimit', { limit: metaState.month_limit })}</span>
-                ) : null}
+                <div className="meta-core">
+                    <strong>{t('app.sampleCount', { count: metaState?.current_case_count ?? 0 })}</strong>
+                    <span>{freshnessHint}</span>
+                </div>
+                <details className="meta-more">
+                    <summary>{t('app.moreInfo')}</summary>
+                    <div className="meta-more-grid">
+                        <span>
+                            {t('app.fetchRange', {
+                                earliest: metaState?.fetched_month_range?.earliest ?? t('common.na'),
+                                latest: metaState?.fetched_month_range?.latest ?? t('common.na')
+                            })}
+                        </span>
+                        <span>
+                            {t('app.selectedSources', {
+                                value: (metaState?.selected_sources && metaState.selected_sources.length > 0)
+                                    ? metaState.selected_sources.map(sourceName).join(' / ')
+                                    : t('common.na')
+                            })}
+                        </span>
+                        {metaState?.truncated_by_limit ? (
+                            <span className="warn">{t('app.monthLimit', { limit: metaState.month_limit })}</span>
+                        ) : null}
+                    </div>
+                </details>
+            </section>
+
+            <section className="starter-guide" role="note" aria-label={t('guide.title')}>
+                <h3>{t('guide.title')}</h3>
+                <ol>
+                    <li>{t('guide.step1')}</li>
+                    <li>{t('guide.step2')}</li>
+                    <li>{t('guide.step3')}</li>
+                </ol>
             </section>
 
             {errorList.length > 0 ? (
                 <section className="error-box" role="alert" aria-live="assertive" aria-atomic="true">
-                    {errorList.join(' | ')}
+                    <ul>
+                        {errorList.map((errorMsg, idx) => (
+                            <li key={`error-${idx}`}>{errorMsg}</li>
+                        ))}
+                    </ul>
+                    <button type="button" className="ghost" onClick={() => void init()}>{t('errors.retryAction')}</button>
                 </section>
             ) : null}
             {(overviewLoading || casesLoading) ? (
@@ -366,6 +409,8 @@ export default function App() {
                 availableRefreshSources={options.fetch_sources}
                 defaultRefreshMonths={frontendConfig.defaultRefreshMonths}
                 showConsulateGroups={frontendConfig.enableConsulateGroups}
+                isRefreshing={isRefreshing}
+                refreshFeedback={refreshFeedback}
                 onRefreshFromMonthChange={setRefreshFromMonth}
                 onRefreshSourcesChange={setRefreshSources}
                 onChange={onFilterChange}

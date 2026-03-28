@@ -32,7 +32,11 @@ export default function ComparisonPanel({ data }: Props) {
                 <p>{t('comparison.hint')}</p>
             </div>
             {!data?.latest || !data.baseline || !data.delta ? (
-                <div className="empty-box">{t('comparison.empty')}</div>
+                <div className="empty-box">
+                    <strong>{t('comparison.emptyTitle')}</strong>
+                    <p>{t('comparison.empty')}</p>
+                    <p>{t('comparison.emptyAction')}</p>
+                </div>
             ) : (
                 <>
                     <div className="comparison-meta">

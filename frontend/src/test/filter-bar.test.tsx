@@ -39,6 +39,8 @@ describe('FilterBar', () => {
                 availableRefreshSources={options.fetch_sources}
                 defaultRefreshMonths={6}
                 showConsulateGroups={true}
+                isRefreshing={false}
+                refreshFeedback={null}
                 onRefreshFromMonthChange={vi.fn()}
                 onRefreshSourcesChange={vi.fn()}
                 onChange={vi.fn()}
@@ -47,8 +49,8 @@ describe('FilterBar', () => {
             />
         )
 
-        expect(screen.getByText('筛选条件')).toBeInTheDocument()
-        expect(screen.getByRole('button', { name: '刷新数据' })).toBeInTheDocument()
+        expect(screen.getByText('一步一步筛选与刷新')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: '开始刷新数据' })).toBeInTheDocument()
         expect(screen.getByRole('button', { name: '重置筛选' })).toBeInTheDocument()
     })
 
@@ -66,6 +68,8 @@ describe('FilterBar', () => {
                 availableRefreshSources={options.fetch_sources}
                 defaultRefreshMonths={6}
                 showConsulateGroups={true}
+                isRefreshing={false}
+                refreshFeedback={null}
                 onRefreshFromMonthChange={vi.fn()}
                 onRefreshSourcesChange={vi.fn()}
                 onChange={onChange}
@@ -79,6 +83,99 @@ describe('FilterBar', () => {
         expect(onChange).toHaveBeenCalledWith({
             ...emptyFilters,
             months: ['2026-03', '2026-02', '2026-01', '2025-12', '2025-11', '2025-10']
+        })
+    })
+
+    it('点击状态勾选应触发 statuses 更新', async () => {
+        const onChange = vi.fn()
+        const user = userEvent.setup()
+
+        render(
+            <FilterBar
+                options={options}
+                consulateGroups={groups}
+                filters={emptyFilters}
+                refreshFromMonth=""
+                refreshSources={['monthly_track']}
+                availableRefreshSources={options.fetch_sources}
+                defaultRefreshMonths={6}
+                showConsulateGroups={true}
+                isRefreshing={false}
+                refreshFeedback={null}
+                onRefreshFromMonthChange={vi.fn()}
+                onRefreshSourcesChange={vi.fn()}
+                onChange={onChange}
+                onReset={vi.fn()}
+                onRefresh={vi.fn()}
+            />
+        )
+
+        await user.click(screen.getByRole('checkbox', { name: 'Pending' }))
+        expect(onChange).toHaveBeenCalledWith({
+            ...emptyFilters,
+            statuses: ['Pending']
+        })
+    })
+
+    it('未分组模式下点击签证勾选应触发 visa_types 更新', async () => {
+        const onChange = vi.fn()
+        const user = userEvent.setup()
+
+        render(
+            <FilterBar
+                options={options}
+                consulateGroups={groups}
+                filters={emptyFilters}
+                refreshFromMonth=""
+                refreshSources={['monthly_track']}
+                availableRefreshSources={options.fetch_sources}
+                defaultRefreshMonths={6}
+                showConsulateGroups={false}
+                isRefreshing={false}
+                refreshFeedback={null}
+                onRefreshFromMonthChange={vi.fn()}
+                onRefreshSourcesChange={vi.fn()}
+                onChange={onChange}
+                onReset={vi.fn()}
+                onRefresh={vi.fn()}
+            />
+        )
+
+        await user.click(screen.getByRole('checkbox', { name: 'F1' }))
+        expect(onChange).toHaveBeenCalledWith({
+            ...emptyFilters,
+            visa_types: ['F1']
+        })
+    })
+
+    it('点击清空本组应移除该组已选领馆', async () => {
+        const onChange = vi.fn()
+        const user = userEvent.setup()
+
+        render(
+            <FilterBar
+                options={options}
+                consulateGroups={groups}
+                filters={{ ...emptyFilters, consulates: ['BeiJing', 'Toronto'] }}
+                refreshFromMonth=""
+                refreshSources={['monthly_track']}
+                availableRefreshSources={options.fetch_sources}
+                defaultRefreshMonths={6}
+                showConsulateGroups={true}
+                isRefreshing={false}
+                refreshFeedback={null}
+                onRefreshFromMonthChange={vi.fn()}
+                onRefreshSourcesChange={vi.fn()}
+                onChange={onChange}
+                onReset={vi.fn()}
+                onRefresh={vi.fn()}
+            />
+        )
+
+        await user.click(screen.getAllByRole('button', { name: '清空本组' })[0])
+        expect(onChange).toHaveBeenCalledWith({
+            ...emptyFilters,
+            consulates: ['Toronto']
         })
     })
 })
