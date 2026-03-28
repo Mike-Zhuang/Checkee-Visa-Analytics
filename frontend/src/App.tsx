@@ -64,6 +64,31 @@ type ErrorKey =
     | 'groups'
     | 'refresh'
 
+type GlassTier = 'full' | 'lite'
+
+function detectGlassTier(): GlassTier {
+    if (typeof window === 'undefined') {
+        return 'lite'
+    }
+
+    const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    if (prefersReducedMotion) {
+        return 'lite'
+    }
+
+    const ua = navigator.userAgent.toLowerCase()
+    const isFirefox = ua.includes('firefox')
+    const isSafari = ua.includes('safari') && !ua.includes('chrome') && !ua.includes('chromium') && !ua.includes('android')
+    const isMobile = /mobile|iphone|ipad|ipod|android/.test(ua)
+    const cpuCores = navigator.hardwareConcurrency || 4
+
+    if (isFirefox || isSafari || isMobile || cpuCores <= 4) {
+        return 'lite'
+    }
+
+    return 'full'
+}
+
 export default function App() {
     const { t, i18n } = useTranslation()
     const [initialized, setInitialized] = useState(false)
@@ -96,6 +121,22 @@ export default function App() {
     const [caseTotal, setCaseTotal] = useState(0)
     const [page, setPage] = useState(1)
     const [pageSize, setPageSize] = useState(frontendConfig.defaultPageSize)
+    const [glassTier, setGlassTier] = useState<GlassTier>(() => detectGlassTier())
+
+    useEffect(() => {
+        const updateTier = () => setGlassTier(detectGlassTier())
+        const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+
+        updateTier()
+
+        if (motionQuery.addEventListener) {
+            motionQuery.addEventListener('change', updateTier)
+            return () => motionQuery.removeEventListener('change', updateTier)
+        }
+
+        motionQuery.addListener(updateTier)
+        return () => motionQuery.removeListener(updateTier)
+    }, [])
 
     const setError = (key: ErrorKey, value: string) => {
         setErrors((prev) => ({ ...prev, [key]: value }))
@@ -318,7 +359,7 @@ export default function App() {
     const errorList = Object.values(errors)
 
     return (
-        <main className="app-shell">
+        <main className={`app-shell glass-tier-${glassTier}`}>
             <header className="hero">
                 <div>
                     <h1>{t('app.title')}</h1>
