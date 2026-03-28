@@ -28,6 +28,34 @@ def test_cases_detail_filters_and_text_search(client, seed_cases) -> None:
     assert payload["items"][0]["case_number"] == "A002"
 
 
+def test_cases_major_category_filters(client, seed_cases) -> None:
+    response = client.get(
+        "/api/v1/cases",
+        params={
+            "major_categories_l1": "STEM",
+            "major_categories_l2": "Software & Systems",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["case_number"] == "A001"
+
+
+def test_cases_major_category_filters_engineering_abbreviation(client, seed_cases) -> None:
+    response = client.get(
+        "/api/v1/cases",
+        params={
+            "major_categories_l1": "STEM",
+            "major_categories_l2": "Engineering",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["case_number"] == "A003"
+
+
 def test_overview_stats(client, seed_cases) -> None:
     response = client.get("/api/v1/stats/overview")
     assert response.status_code == 200

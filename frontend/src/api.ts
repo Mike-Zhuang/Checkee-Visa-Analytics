@@ -1,5 +1,6 @@
 import type {
     AdminLoginResponse,
+    MajorClassificationsResponse,
     AdminSessionStateResponse,
     AnomalyItem,
     CaseItem,
@@ -32,6 +33,8 @@ export function paramsFromFilters(filters: Filters): URLSearchParams {
     assignArray('statuses')
     assignArray('entries')
     assignArray('months')
+    assignArray('major_categories_l1')
+    assignArray('major_categories_l2')
     assignArray('majors')
     assignArray('employers')
     assignArray('detail_cities')
@@ -142,6 +145,58 @@ export async function logoutAdmin(adminToken: string): Promise<void> {
     if (!res.ok) {
         const detail = await parseErrorDetail(res)
         throw new Error(`admin logout failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+}
+
+export async function getAdminMajorClassifications(
+    adminToken: string,
+    query = '',
+    limit = 500
+): Promise<MajorClassificationsResponse> {
+    const params = new URLSearchParams()
+    if (query.trim()) {
+        params.set('q', query.trim())
+    }
+    params.set('limit', String(limit))
+    const suffix = params.toString() ? `?${params.toString()}` : ''
+
+    const res = await fetch(`${API_BASE}/admin/major-classifications${suffix}`, {
+        headers: { Authorization: `Bearer ${adminToken.trim()}` }
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`admin major classifications failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as MajorClassificationsResponse
+}
+
+export async function saveAdminMajorOverrides(
+    adminToken: string,
+    items: Array<{ major: string; category_l1: string; category_l2: string }>
+): Promise<void> {
+    const res = await fetch(`${API_BASE}/admin/major-classifications`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${adminToken.trim()}`
+        },
+        body: JSON.stringify({ items })
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`admin major override save failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+}
+
+export async function deleteAdminMajorOverride(adminToken: string, major: string): Promise<void> {
+    const params = new URLSearchParams({ major })
+    const res = await fetch(`${API_BASE}/admin/major-classifications?${params.toString()}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken.trim()}` }
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`admin major override delete failed: ${res.status}${detail ? ` ${detail}` : ''}`)
     }
 }
 

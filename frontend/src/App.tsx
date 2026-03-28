@@ -48,6 +48,8 @@ const EMPTY_FILTERS: Filters = {
     statuses: [],
     entries: [],
     months: [],
+    major_categories_l1: [],
+    major_categories_l2: [],
     majors: [],
     employers: [],
     detail_cities: [],
@@ -111,6 +113,9 @@ export default function App() {
         consulates: [],
         statuses: [],
         entries: [],
+        major_categories_l1: [],
+        major_categories_l2: [],
+        major_category_mapping: {},
         majors: [],
         employers: [],
         detail_cities: [],
@@ -380,6 +385,7 @@ export default function App() {
                             <span>{t('app.language')}</span>
                             <select
                                 id="lang-select"
+                                className="select-modern"
                                 aria-label={t('app.language')}
                                 value={languageValue}
                                 onChange={(e) => void i18n.changeLanguage(e.currentTarget.value)}
@@ -445,11 +451,8 @@ export default function App() {
                 </section>
             ) : null}
             {(overviewLoading || casesLoading) ? (
-                <div className="loading" role="status" aria-live="polite" aria-busy="true">
-                    {t('app.moduleLoading', {
-                        overview: overviewLoading ? t('app.overviewModule') : '',
-                        cases: casesLoading ? t('app.casesModule') : ''
-                    })}
+                <div className="loading loading-floating" role="status" aria-live="polite" aria-atomic="true" aria-busy="true">
+                    {t('common.loading')}
                 </div>
             ) : null}
 

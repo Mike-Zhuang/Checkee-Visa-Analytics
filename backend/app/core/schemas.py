@@ -89,11 +89,50 @@ class OptionsResponse(BaseModel):
     consulates: list[str]
     statuses: list[str]
     entries: list[str]
+    major_categories_l1: list[str]
+    major_categories_l2: list[str]
+    major_category_mapping: dict[str, list[str]]
     majors: list[str]
     employers: list[str]
     detail_cities: list[str]
     detail_states: list[str]
     fetch_sources: list[str]
+
+
+class MajorClassificationRow(BaseModel):
+    major: str
+    major_normalized: str
+    count: int
+    auto_category_l1: str
+    auto_category_l2: str
+    effective_category_l1: str
+    effective_category_l2: str
+    source: Literal["manual", "auto", "not_applicable", "unknown"]
+    has_manual_override: bool
+    override_updated_at: str | None = None
+
+
+class MajorClassificationsResponse(BaseModel):
+    total: int
+    items: list[MajorClassificationRow]
+    category_l1_options: list[str]
+    category_l2_options: list[str]
+
+
+class MajorOverrideItem(BaseModel):
+    major: str = Field(min_length=1)
+    category_l1: str = Field(min_length=1)
+    category_l2: str = Field(min_length=1)
+
+
+class MajorOverrideUpsertRequest(BaseModel):
+    items: list[MajorOverrideItem] = Field(min_length=1)
+
+
+class MajorOverrideMutationResponse(BaseModel):
+    success: bool
+    updated: int
+    message: str
 
 
 class CohortStatsRow(BaseModel):

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -9,6 +9,9 @@ const apiMock = vi.hoisted(() => ({
     getMetaState: vi.fn(),
     loginAdmin: vi.fn(),
     getAdminSession: vi.fn(),
+    getAdminMajorClassifications: vi.fn(),
+    saveAdminMajorOverrides: vi.fn(),
+    deleteAdminMajorOverride: vi.fn(),
     logoutAdmin: vi.fn(),
     refreshDataWithSession: vi.fn()
 }))
@@ -18,6 +21,9 @@ vi.mock('../api', () => ({
     getMetaState: apiMock.getMetaState,
     loginAdmin: apiMock.loginAdmin,
     getAdminSession: apiMock.getAdminSession,
+    getAdminMajorClassifications: apiMock.getAdminMajorClassifications,
+    saveAdminMajorOverrides: apiMock.saveAdminMajorOverrides,
+    deleteAdminMajorOverride: apiMock.deleteAdminMajorOverride,
     logoutAdmin: apiMock.logoutAdmin,
     refreshDataWithSession: apiMock.refreshDataWithSession
 }))
@@ -33,6 +39,11 @@ describe('AdminPage', () => {
             consulates: ['BeiJing'],
             statuses: ['Pending'],
             entries: ['I20'],
+            major_categories_l1: ['STEM'],
+            major_categories_l2: ['AI & Data'],
+            major_category_mapping: {
+                STEM: ['AI & Data']
+            },
             majors: ['CS'],
             employers: ['Google'],
             detail_cities: ['Beijing'],
@@ -68,6 +79,63 @@ describe('AdminPage', () => {
             authenticated: true,
             expires_at: '2026-03-28T15:58:21.837314Z'
         })
+        apiMock.getAdminMajorClassifications.mockResolvedValue({
+            total: 4,
+            category_l1_options: ['STEM', 'Business', 'Other'],
+            category_l2_options: ['AI & Data', 'Engineering', 'Not Applicable'],
+            items: [
+                {
+                    major: 'CS',
+                    major_normalized: 'cs',
+                    count: 10,
+                    auto_category_l1: 'STEM',
+                    auto_category_l2: 'AI & Data',
+                    effective_category_l1: 'STEM',
+                    effective_category_l2: 'AI & Data',
+                    source: 'auto',
+                    has_manual_override: false,
+                    override_updated_at: null
+                },
+                {
+                    major: 'N/A',
+                    major_normalized: 'n a',
+                    count: 3,
+                    auto_category_l1: 'Other',
+                    auto_category_l2: 'Not Applicable',
+                    effective_category_l1: 'Other',
+                    effective_category_l2: 'Not Applicable',
+                    source: 'not_applicable',
+                    has_manual_override: false,
+                    override_updated_at: null
+                },
+                {
+                    major: 'Unknown Major',
+                    major_normalized: 'unknown major',
+                    count: 2,
+                    auto_category_l1: 'Other',
+                    auto_category_l2: 'Unspecified',
+                    effective_category_l1: 'Other',
+                    effective_category_l2: 'Unspecified',
+                    source: 'unknown',
+                    has_manual_override: false,
+                    override_updated_at: null
+                },
+                {
+                    major: 'Finance',
+                    major_normalized: 'finance',
+                    count: 2,
+                    auto_category_l1: 'Business',
+                    auto_category_l2: 'Finance & Accounting',
+                    effective_category_l1: 'Business',
+                    effective_category_l2: 'Finance & Accounting',
+                    source: 'manual',
+                    has_manual_override: true,
+                    override_updated_at: '2026-03-28T10:00:00Z'
+                }
+            ]
+        })
+        apiMock.saveAdminMajorOverrides.mockResolvedValue(undefined)
+        apiMock.deleteAdminMajorOverride.mockResolvedValue(undefined)
         apiMock.logoutAdmin.mockResolvedValue(undefined)
         apiMock.refreshDataWithSession.mockResolvedValue(undefined)
     })
@@ -105,9 +173,45 @@ describe('AdminPage', () => {
             expect(screen.getByText('已登录')).toBeInTheDocument()
             expect(apiMock.loginAdmin).toHaveBeenCalledWith('Zcb070920!')
             expect(apiMock.getAdminSession).toHaveBeenCalledWith('session-token')
+            expect(apiMock.getAdminMajorClassifications).toHaveBeenCalledWith('session-token', '', 600)
         })
 
         const expiryHint = screen.getByText(/会话有效期至：/)
         expect(expiryHint.textContent ?? '').not.toMatch(/T\d{2}:\d{2}:\d{2}/)
+    })
+
+    it('应按来源分区展示且 N/A 行只读', async () => {
+        const user = userEvent.setup()
+        apiMock.loginAdmin.mockResolvedValue({
+            token: 'session-token',
+            expires_at: '2026-03-28T15:58:21.837314Z'
+        })
+
+        render(<AdminPage />)
+
+        await waitFor(() => {
+            expect(apiMock.getOptions).toHaveBeenCalledTimes(1)
+            expect(apiMock.getMetaState).toHaveBeenCalledTimes(1)
+        })
+
+        await user.type(screen.getByPlaceholderText('请输入管理员密码'), 'Zcb070920!')
+        await user.click(screen.getByRole('button', { name: '登录' }))
+
+        await waitFor(() => {
+            expect(screen.getByText('待人工处理（未命中）')).toBeInTheDocument()
+            expect(screen.getByText('人工已覆盖')).toBeInTheDocument()
+            expect(screen.getByText('自动命中')).toBeInTheDocument()
+            expect(screen.getByText('无专业信息（只读）')).toBeInTheDocument()
+        })
+
+        const naRow = screen.getByText('N/A').closest('tr')
+        expect(naRow).toBeTruthy()
+        if (!naRow) {
+            throw new Error('N/A row not found')
+        }
+
+        expect(within(naRow).getByRole('button', { name: '保存' })).toBeDisabled()
+        expect(within(naRow).getByRole('button', { name: '重置' })).toBeDisabled()
+        expect(within(naRow).getByRole('button', { name: '删除覆盖' })).toBeDisabled()
     })
 })

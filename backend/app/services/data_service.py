@@ -6,14 +6,17 @@ from threading import RLock
 from typing import Any
 
 from app.core.config import MAX_FETCH_MONTHS, REFRESH_MIN_INTERVAL_SECONDS
-from app.services import analytics
+from app.services import analytics, major_classifier
 from app.services.scraper import CaseRow, FetchResult, fetch_cases, list_supported_sources
 from app.services.storage import (
     load_cases,
+    load_major_overrides,
+    load_major_taxonomy,
     load_meta,
     load_monthly,
     load_report,
     save_cases,
+    save_major_overrides,
     save_meta,
     save_monthly,
     save_report,
@@ -87,6 +90,35 @@ class DataService:
         normalized.insert(0, entry)
         return normalized[:limit]
 
+    def _taxonomy_rules(self) -> list[dict[str, Any]]:
+        payload = load_major_taxonomy()
+        rules = payload.get("rules") if isinstance(payload, dict) else None
+        if isinstance(rules, list) and rules:
+            return [dict(item) for item in rules if isinstance(item, dict)]
+        return [dict(item) for item in major_classifier.DEFAULT_MAJOR_TAXONOMY_RULES]
+
+    @staticmethod
+    def _taxonomy_l1_options(rules: list[dict[str, Any]]) -> list[str]:
+        return major_classifier.taxonomy_l1_options(rules)
+
+    @staticmethod
+    def _taxonomy_l2_options(rules: list[dict[str, Any]]) -> list[str]:
+        return major_classifier.taxonomy_l2_options(rules)
+
+    def _major_overrides(self) -> dict[str, dict[str, Any]]:
+        return load_major_overrides()
+
+    def _ensure_major_classification(self, rows: list[dict[str, Any]]) -> dict[str, int]:
+        rules = self._taxonomy_rules()
+        overrides = self._major_overrides()
+        return major_classifier.apply_major_classification(rows, overrides, rules)
+
+    def _reclassify_and_save_rows(self, rows: list[dict[str, Any]]) -> dict[str, int]:
+        metrics = self._ensure_major_classification(rows)
+        if rows:
+            save_cases(rows)
+        return metrics
+
     def record_refresh_event(
         self,
         *,
@@ -133,7 +165,12 @@ class DataService:
             rows = fetch_result.rows
             payload = [asdict(r) if isinstance(r, CaseRow) else r for r in rows]
             merged_detail_count = self._merge_existing_detail_fields(payload, previous_rows)
-            coverage = {**fetch_result.coverage, "detail_merged_from_history_count": merged_detail_count}
+            classification_metrics = self._ensure_major_classification(payload)
+            coverage = {
+                **fetch_result.coverage,
+                "detail_merged_from_history_count": merged_detail_count,
+                **classification_metrics,
+            }
             data_quality = self._compute_data_quality(payload)
 
             save_cases(payload)
@@ -173,6 +210,11 @@ class DataService:
                     "source_discovery_count": len(fetch_result.source_discovery),
                     "coverage": coverage,
                     "data_quality": data_quality,
+                    "major_classification": {
+                        "category_l1_options": self._taxonomy_l1_options(self._taxonomy_rules()),
+                        "category_l2_options": self._taxonomy_l2_options(self._taxonomy_rules()),
+                        **classification_metrics,
+                    },
                     "last_refresh_result": success_entry,
                     "refresh_history": self._append_refresh_history(
                         previous_meta.get("refresh_history"),
@@ -274,7 +316,14 @@ class DataService:
         }
 
     def get_cases(self) -> list[dict[str, str]]:
-        return load_cases()
+        rows = load_cases()
+        if not rows:
+            return rows
+
+        has_full_classification = all(str(row.get("major_category_l1") or "").strip() for row in rows)
+        if not has_full_classification:
+            self._ensure_major_classification(rows)
+        return rows
 
     def get_overview(self, rows: list[dict[str, str]]) -> dict[str, Any]:
         return analytics.overview_stats(rows)
@@ -297,7 +346,7 @@ class DataService:
     def get_anomalies(self, rows: list[dict[str, str]], threshold_days: int, limit: int) -> list[dict[str, Any]]:
         return analytics.anomalies(rows, threshold_days=threshold_days, limit=limit)
 
-    def get_options(self, rows: list[dict[str, str]]) -> dict[str, list[str]]:
+    def get_options(self, rows: list[dict[str, str]]) -> dict[str, Any]:
         return analytics.options(rows)
 
     def get_consulate_groups(self, rows: list[dict[str, str]]) -> dict[str, Any]:
@@ -317,6 +366,8 @@ class DataService:
         entries: set[str] | None,
         months: set[str] | None,
         majors: set[str] | None,
+        major_categories_l1: set[str] | None,
+        major_categories_l2: set[str] | None,
         employers: set[str] | None,
         detail_cities: set[str] | None,
         detail_states: set[str] | None,
@@ -330,11 +381,92 @@ class DataService:
             entries=entries,
             months=months,
             majors=majors,
+            major_categories_l1=major_categories_l1,
+            major_categories_l2=major_categories_l2,
             employers=employers,
             detail_cities=detail_cities,
             detail_states=detail_states,
             search_text=search_text,
         )
+
+    def get_major_classifications(self, rows: list[dict[str, str]], query: str | None, limit: int = 500) -> dict[str, Any]:
+        rules = self._taxonomy_rules()
+        overrides = self._major_overrides()
+        items = major_classifier.major_classification_items(rows, overrides, rules)
+
+        keyword = (query or "").strip().lower()
+        if keyword:
+            items = [
+                item
+                for item in items
+                if keyword in str(item.get("major") or "").lower()
+                or keyword in str(item.get("major_normalized") or "").lower()
+            ]
+
+        return {
+            "total": len(items),
+            "items": items[: max(1, limit)],
+            "category_l1_options": self._taxonomy_l1_options(rules),
+            "category_l2_options": self._taxonomy_l2_options(rules),
+        }
+
+    def upsert_major_overrides(
+        self,
+        items: list[dict[str, str]],
+        *,
+        operator: str,
+    ) -> int:
+        updated = 0
+        now = datetime.now().isoformat(timespec="seconds")
+
+        with self._lock:
+            overrides = self._major_overrides()
+            for item in items:
+                major = str(item.get("major") or "").strip()
+                major_norm = major_classifier.normalize_major(major)
+                if not major_norm:
+                    continue
+                if major_classifier.is_not_applicable_major(major_norm):
+                    continue
+
+                category_l1 = str(item.get("category_l1") or "").strip() or "Other"
+                category_l2 = str(item.get("category_l2") or "").strip() or "Unspecified"
+
+                overrides[major_norm] = {
+                    "major": major,
+                    "category_l1": category_l1,
+                    "category_l2": category_l2,
+                    "updated_at": now,
+                    "updated_by": operator,
+                }
+                updated += 1
+
+            save_major_overrides(overrides)
+            rows = load_cases()
+            if rows:
+                self._reclassify_and_save_rows(rows)
+
+        return updated
+
+    def delete_major_override(self, major: str) -> bool:
+        major_norm = major_classifier.normalize_major(major)
+        if not major_norm:
+            return False
+        if major_classifier.is_not_applicable_major(major_norm):
+            return False
+
+        with self._lock:
+            overrides = self._major_overrides()
+            if major_norm not in overrides:
+                return False
+
+            overrides.pop(major_norm, None)
+            save_major_overrides(overrides)
+            rows = load_cases()
+            if rows:
+                self._reclassify_and_save_rows(rows)
+
+        return True
 
     def get_meta(self) -> dict[str, Any]:
         meta = load_meta()

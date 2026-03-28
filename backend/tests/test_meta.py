@@ -9,6 +9,11 @@ def test_meta_options_and_state(client, seed_cases) -> None:
     assert "H1B" in options_payload["visa_types"]
     assert "BeiJing" in options_payload["consulates"]
     assert "CS" in options_payload["majors"]
+    assert "STEM" in options_payload["major_categories_l1"]
+    assert options_payload["major_categories_l2"]
+    assert "major_category_mapping" in options_payload
+    assert "STEM" in options_payload["major_category_mapping"]
+    assert "Software & Systems" in options_payload["major_category_mapping"]["STEM"]
     assert "Google" in options_payload["employers"]
     assert "Beijing" in options_payload["detail_cities"]
     assert "Ontario" in options_payload["detail_states"]

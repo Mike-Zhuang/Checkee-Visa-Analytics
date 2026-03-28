@@ -1,9 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { getAdminSession, getMetaState, getOptions, loginAdmin, logoutAdmin, refreshDataWithSession } from './api'
+import {
+    deleteAdminMajorOverride,
+    getAdminMajorClassifications,
+    getAdminSession,
+    getMetaState,
+    getOptions,
+    loginAdmin,
+    logoutAdmin,
+    refreshDataWithSession,
+    saveAdminMajorOverrides
+} from './api'
 import { frontendConfig } from './config'
-import type { MetaState, OptionsResponse, RefreshHistoryItem, RefreshPayload } from './types'
+import type { MajorClassificationItem, MetaState, OptionsResponse, RefreshHistoryItem, RefreshPayload } from './types'
 
 const EMPTY_OPTIONS: OptionsResponse = {
     months: [],
@@ -11,6 +21,9 @@ const EMPTY_OPTIONS: OptionsResponse = {
     consulates: [],
     statuses: [],
     entries: [],
+    major_categories_l1: [],
+    major_categories_l2: [],
+    major_category_mapping: {},
     majors: [],
     employers: [],
     detail_cities: [],
@@ -64,6 +77,15 @@ export default function AdminPage() {
     const [isRefreshing, setIsRefreshing] = useState(false)
     const [loadError, setLoadError] = useState<string | null>(null)
     const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
+    const [majorFeedback, setMajorFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
+    const [majorSearch, setMajorSearch] = useState('')
+    const [majorItems, setMajorItems] = useState<MajorClassificationItem[]>([])
+    const [majorTotal, setMajorTotal] = useState(0)
+    const [majorCategoryL1Options, setMajorCategoryL1Options] = useState<string[]>([])
+    const [majorCategoryL2Options, setMajorCategoryL2Options] = useState<string[]>([])
+    const [majorDrafts, setMajorDrafts] = useState<Record<string, { category_l1: string; category_l2: string }>>({})
+    const [isLoadingMajors, setIsLoadingMajors] = useState(false)
+    const [savingMajorKey, setSavingMajorKey] = useState<string | null>(null)
     const [glassTier, setGlassTier] = useState<GlassTier>(() => detectGlassTier())
 
     const clearAdminSession = useCallback(() => {
@@ -156,10 +178,51 @@ export default function AdminPage() {
         setIsLoading(false)
     }
 
+    const loadMajorClassifications = useCallback(
+        async (token: string, query = '') => {
+            if (!token.trim()) {
+                setMajorItems([])
+                setMajorTotal(0)
+                return
+            }
+
+            setIsLoadingMajors(true)
+            try {
+                const payload = await getAdminMajorClassifications(token, query, 600)
+                setMajorItems(payload.items)
+                setMajorTotal(payload.total)
+                setMajorCategoryL1Options(payload.category_l1_options)
+                setMajorCategoryL2Options(payload.category_l2_options)
+            } catch (error) {
+                const message = error instanceof Error ? error.message : t('admin.majorLoadFailed')
+                if (message.includes('401') || message.includes('403')) {
+                    clearAdminSession()
+                    setAuthError(t('admin.sessionExpired'))
+                    return
+                }
+                setMajorFeedback({ kind: 'error', message: `${t('admin.majorLoadFailed')}: ${message}` })
+            } finally {
+                setIsLoadingMajors(false)
+            }
+        },
+        [clearAdminSession, t]
+    )
+
     useEffect(() => {
         void loadMetaAndOptions()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
+
+    useEffect(() => {
+        if (!adminToken.trim()) {
+            setMajorItems([])
+            setMajorTotal(0)
+            setMajorDrafts({})
+            setMajorFeedback(null)
+            return
+        }
+        void loadMajorClassifications(adminToken)
+    }, [adminToken, loadMajorClassifications])
 
     const cooldownHint = useMemo(() => {
         const seconds = metaState?.refresh_available_in_seconds ?? 0
@@ -254,6 +317,137 @@ export default function AdminPage() {
         }
     }
 
+    const sourceTag = (source: string): string => {
+        if (source === 'manual') return t('admin.majorSource.manual')
+        if (source === 'auto') return t('admin.majorSource.auto')
+        if (source === 'not_applicable') return t('admin.majorSource.notApplicable')
+        return t('admin.majorSource.unknown')
+    }
+
+    const rowDraft = (row: MajorClassificationItem): { category_l1: string; category_l2: string } => {
+        const draft = majorDrafts[row.major_normalized]
+        if (draft) {
+            return draft
+        }
+        return {
+            category_l1: row.effective_category_l1,
+            category_l2: row.effective_category_l2
+        }
+    }
+
+    const resolveMajorL2Options = useCallback(
+        (categoryL1: string): string[] => {
+            const fallback = majorCategoryL2Options.length > 0 ? majorCategoryL2Options : options.major_categories_l2
+            const mapped = options.major_category_mapping[categoryL1] ?? []
+            if (mapped.length === 0) {
+                return fallback
+            }
+
+            const fallbackSet = new Set(fallback)
+            const ordered = mapped.filter((item) => fallbackSet.has(item))
+            if (ordered.length > 0) {
+                return ordered
+            }
+
+            return fallback
+        },
+        [majorCategoryL2Options, options.major_categories_l2, options.major_category_mapping]
+    )
+
+    const updateMajorDraft = (row: MajorClassificationItem, next: { category_l1?: string; category_l2?: string }) => {
+        const current = rowDraft(row)
+        const nextCategoryL1 = next.category_l1 ?? current.category_l1
+        const allowedCategoryL2 = resolveMajorL2Options(nextCategoryL1)
+        let nextCategoryL2 = next.category_l2 ?? current.category_l2
+        if (!allowedCategoryL2.includes(nextCategoryL2)) {
+            nextCategoryL2 = allowedCategoryL2[0] ?? current.category_l2
+        }
+
+        setMajorDrafts((prev) => ({
+            ...prev,
+            [row.major_normalized]: {
+                category_l1: nextCategoryL1,
+                category_l2: nextCategoryL2
+            }
+        }))
+    }
+
+    const resetMajorDraft = (row: MajorClassificationItem) => {
+        setMajorDrafts((prev) => {
+            const next = { ...prev }
+            delete next[row.major_normalized]
+            return next
+        })
+    }
+
+    const saveMajorRow = async (row: MajorClassificationItem) => {
+        if (!adminToken.trim()) {
+            setMajorFeedback({ kind: 'error', message: t('admin.loginRequired') })
+            return
+        }
+        if (row.source === 'not_applicable') {
+            setMajorFeedback({ kind: 'error', message: t('admin.majorNotApplicableReadonly') })
+            return
+        }
+
+        const draft = rowDraft(row)
+        setSavingMajorKey(row.major_normalized)
+        setMajorFeedback(null)
+
+        try {
+            await saveAdminMajorOverrides(adminToken, [
+                {
+                    major: row.major,
+                    category_l1: draft.category_l1,
+                    category_l2: draft.category_l2
+                }
+            ])
+            await loadMetaAndOptions()
+            await loadMajorClassifications(adminToken, majorSearch)
+            setMajorFeedback({ kind: 'success', message: t('admin.majorSaveSuccess', { major: row.major }) })
+        } catch (error) {
+            const message = error instanceof Error ? error.message : t('admin.majorSaveFailed')
+            if (message.includes('401') || message.includes('403')) {
+                clearAdminSession()
+                setAuthError(t('admin.sessionExpired'))
+                return
+            }
+            setMajorFeedback({ kind: 'error', message: `${t('admin.majorSaveFailed')}: ${message}` })
+        } finally {
+            setSavingMajorKey(null)
+        }
+    }
+
+    const removeMajorOverride = async (row: MajorClassificationItem) => {
+        if (!adminToken.trim()) {
+            setMajorFeedback({ kind: 'error', message: t('admin.loginRequired') })
+            return
+        }
+        if (row.source === 'not_applicable') {
+            setMajorFeedback({ kind: 'error', message: t('admin.majorNotApplicableReadonly') })
+            return
+        }
+
+        setSavingMajorKey(row.major_normalized)
+        setMajorFeedback(null)
+        try {
+            await deleteAdminMajorOverride(adminToken, row.major)
+            await loadMetaAndOptions()
+            await loadMajorClassifications(adminToken, majorSearch)
+            setMajorFeedback({ kind: 'success', message: t('admin.majorDeleteSuccess', { major: row.major }) })
+        } catch (error) {
+            const message = error instanceof Error ? error.message : t('admin.majorDeleteFailed')
+            if (message.includes('401') || message.includes('403')) {
+                clearAdminSession()
+                setAuthError(t('admin.sessionExpired'))
+                return
+            }
+            setMajorFeedback({ kind: 'error', message: `${t('admin.majorDeleteFailed')}: ${message}` })
+        } finally {
+            setSavingMajorKey(null)
+        }
+    }
+
     useEffect(() => {
         if (!adminToken.trim()) {
             return
@@ -288,6 +482,67 @@ export default function AdminPage() {
     const languageValue = i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'zh'
     const history = metaState?.refresh_history ?? []
     const showLoginGate = !adminToken.trim()
+    const majorGroups = useMemo(() => {
+        const grouped: {
+            unknown: MajorClassificationItem[]
+            manual: MajorClassificationItem[]
+            auto: MajorClassificationItem[]
+            not_applicable: MajorClassificationItem[]
+        } = {
+            unknown: [],
+            manual: [],
+            auto: [],
+            not_applicable: []
+        }
+
+        for (const item of majorItems) {
+            if (item.source === 'manual') {
+                grouped.manual.push(item)
+                continue
+            }
+            if (item.source === 'auto') {
+                grouped.auto.push(item)
+                continue
+            }
+            if (item.source === 'not_applicable') {
+                grouped.not_applicable.push(item)
+                continue
+            }
+            grouped.unknown.push(item)
+        }
+        return grouped
+    }, [majorItems])
+
+    const majorGroupSections = useMemo(
+        () => [
+            {
+                key: 'unknown' as const,
+                label: t('admin.majorGroupUnknownTitle'),
+                hint: t('admin.majorGroupUnknownHint'),
+                items: majorGroups.unknown
+            },
+            {
+                key: 'manual' as const,
+                label: t('admin.majorGroupManualTitle'),
+                hint: t('admin.majorGroupManualHint'),
+                items: majorGroups.manual
+            },
+            {
+                key: 'auto' as const,
+                label: t('admin.majorGroupAutoTitle'),
+                hint: t('admin.majorGroupAutoHint'),
+                items: majorGroups.auto
+            },
+            {
+                key: 'not_applicable' as const,
+                label: t('admin.majorGroupNotApplicableTitle'),
+                hint: t('admin.majorGroupNotApplicableHint'),
+                items: majorGroups.not_applicable
+            }
+        ].filter((group) => group.items.length > 0),
+        [majorGroups.auto, majorGroups.manual, majorGroups.not_applicable, majorGroups.unknown, t]
+    )
+
     const sessionExpiresAtDisplay = useMemo(() => {
         if (!sessionExpiresAt) {
             return null
@@ -323,6 +578,7 @@ export default function AdminPage() {
                         <span>{t('app.language')}</span>
                         <select
                             id="admin-lang-select"
+                            className="select-modern"
                             aria-label={t('app.language')}
                             value={languageValue}
                             onChange={(e) => void i18n.changeLanguage(e.currentTarget.value)}
@@ -481,6 +737,162 @@ export default function AdminPage() {
                         </ul>
                     )}
                 </div>
+            </section>
+
+            <section className="panel admin-panel major-admin-panel" role="region" aria-labelledby="admin-major-title">
+                <div className="panel-head">
+                    <h3 id="admin-major-title">{t('admin.majorPanelTitle')}</h3>
+                    <p>{t('admin.majorPanelHint', { total: majorTotal })}</p>
+                </div>
+
+                {showLoginGate ? (
+                    <p className="hint">{t('admin.loginRequired')}</p>
+                ) : (
+                    <>
+                        <div className="admin-major-toolbar">
+                            <label className="field" htmlFor="admin-major-search">
+                                <span>{t('admin.majorSearchLabel')}</span>
+                                <input
+                                    id="admin-major-search"
+                                    type="text"
+                                    value={majorSearch}
+                                    placeholder={t('admin.majorSearchPlaceholder')}
+                                    onChange={(e) => setMajorSearch(e.currentTarget.value)}
+                                />
+                            </label>
+                            <div className="actions compact">
+                                <button
+                                    type="button"
+                                    className="ghost"
+                                    disabled={isLoadingMajors || isRefreshing}
+                                    onClick={() => void loadMajorClassifications(adminToken, majorSearch)}
+                                >
+                                    {t('admin.majorSearchAction')}
+                                </button>
+                            </div>
+                        </div>
+
+                        {majorFeedback ? <div className={`refresh-feedback ${majorFeedback.kind}`}>{majorFeedback.message}</div> : null}
+
+                        <div className="table-wrap admin-major-table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th scope="col">{t('admin.majorColumnMajor')}</th>
+                                        <th scope="col">{t('admin.majorColumnCount')}</th>
+                                        <th scope="col">{t('admin.majorColumnAuto')}</th>
+                                        <th scope="col">{t('admin.majorColumnManual')}</th>
+                                        <th scope="col">{t('admin.majorColumnSource')}</th>
+                                        <th scope="col">{t('admin.majorColumnActions')}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {majorItems.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6} className="admin-major-empty">{t('admin.majorEmpty')}</td>
+                                        </tr>
+                                    ) : (
+                                        majorGroupSections.flatMap((group) => {
+                                            const rows = [
+                                                <tr key={`group-${group.key}`} className={`admin-major-group-row group-${group.key}`}>
+                                                    <td colSpan={6}>
+                                                        <div className="admin-major-group-head">
+                                                            <strong>{group.label}</strong>
+                                                            <span>{t('admin.majorGroupCount', { count: group.items.length })}</span>
+                                                            <small>{group.hint}</small>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ]
+
+                                            for (const row of group.items) {
+                                                const draft = rowDraft(row)
+                                                const isSaving = savingMajorKey === row.major_normalized
+                                                const isReadonlyRow = row.source === 'not_applicable'
+                                                const isDirty =
+                                                    draft.category_l1 !== row.effective_category_l1
+                                                    || draft.category_l2 !== row.effective_category_l2
+                                                const rowCategoryL2Options = resolveMajorL2Options(draft.category_l1)
+
+                                                rows.push(
+                                                    <tr key={row.major_normalized} className={isReadonlyRow ? 'admin-major-row-readonly' : ''}>
+                                                        <td>
+                                                            <div className="admin-major-name">
+                                                                <strong>{row.major}</strong>
+                                                                <small>{row.major_normalized}</small>
+                                                            </div>
+                                                        </td>
+                                                        <td>{row.count}</td>
+                                                        <td>
+                                                            {row.auto_category_l1} / {row.auto_category_l2}
+                                                        </td>
+                                                        <td>
+                                                            <div className="admin-major-selects">
+                                                                <select
+                                                                    className="select-modern"
+                                                                    value={draft.category_l1}
+                                                                    disabled={isSaving || isReadonlyRow}
+                                                                    onChange={(e) => updateMajorDraft(row, { category_l1: e.currentTarget.value })}
+                                                                >
+                                                                    {(majorCategoryL1Options.length > 0 ? majorCategoryL1Options : options.major_categories_l1).map((value) => (
+                                                                        <option key={`l1-${value}`} value={value}>{value}</option>
+                                                                    ))}
+                                                                </select>
+                                                                <select
+                                                                    className="select-modern"
+                                                                    value={draft.category_l2}
+                                                                    disabled={isSaving || isReadonlyRow}
+                                                                    onChange={(e) => updateMajorDraft(row, { category_l2: e.currentTarget.value })}
+                                                                >
+                                                                    {rowCategoryL2Options.map((value) => (
+                                                                        <option key={`l2-${value}`} value={value}>{value}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+                                                        </td>
+                                                        <td>
+                                                            <span className={`admin-status status-${row.source}`}>{sourceTag(row.source)}</span>
+                                                        </td>
+                                                        <td>
+                                                            <div className="admin-major-actions">
+                                                                <button
+                                                                    type="button"
+                                                                    className="ghost mini"
+                                                                    disabled={isReadonlyRow || !isDirty || isSaving}
+                                                                    onClick={() => void saveMajorRow(row)}
+                                                                >
+                                                                    {t('admin.majorSaveAction')}
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className="ghost mini"
+                                                                    disabled={isReadonlyRow || isSaving}
+                                                                    onClick={() => resetMajorDraft(row)}
+                                                                >
+                                                                    {t('admin.majorResetAction')}
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className="ghost mini"
+                                                                    disabled={isReadonlyRow || isSaving || !row.has_manual_override}
+                                                                    onClick={() => void removeMajorOverride(row)}
+                                                                >
+                                                                    {t('admin.majorDeleteAction')}
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            }
+
+                                            return rows
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </>
+                )}
             </section>
         </main>
     )

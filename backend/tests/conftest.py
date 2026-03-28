@@ -125,6 +125,8 @@ def isolated_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(storage, "MONTHLY_CSV", data_dir / "live_monthly_all_visa.csv")
     monkeypatch.setattr(storage, "REPORT_MD", data_dir / "live_report_all_visa.md")
     monkeypatch.setattr(storage, "META_JSON", data_dir / "meta.json")
+    monkeypatch.setattr(storage, "MAJOR_TAXONOMY_JSON", data_dir / "major_taxonomy_rules.json")
+    monkeypatch.setattr(storage, "MAJOR_OVERRIDES_JSON", data_dir / "major_overrides.json")
 
 
 @pytest.fixture

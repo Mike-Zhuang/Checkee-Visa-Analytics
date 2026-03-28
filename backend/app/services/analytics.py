@@ -105,6 +105,8 @@ def filter_rows(
     entries: set[str] | None = None,
     months: set[str] | None = None,
     majors: set[str] | None = None,
+    major_categories_l1: set[str] | None = None,
+    major_categories_l2: set[str] | None = None,
     employers: set[str] | None = None,
     detail_cities: set[str] | None = None,
     detail_states: set[str] | None = None,
@@ -125,6 +127,10 @@ def filter_rows(
         if entries and (r.get("visa_entry") or "") not in entries:
             continue
         if months and m not in months:
+            continue
+        if major_categories_l1 and (r.get("major_category_l1") or "") not in major_categories_l1:
+            continue
+        if major_categories_l2 and (r.get("major_category_l2") or "") not in major_categories_l2:
             continue
         if majors and (r.get("major") or "") not in majors:
             continue
@@ -408,12 +414,27 @@ def anomalies(rows: list[dict[str, str]], threshold_days: int = 120, limit: int 
     return result[: max(1, limit)]
 
 
-def options(rows: list[dict[str, str]]) -> dict[str, list[str]]:
+def options(rows: list[dict[str, str]]) -> dict[str, Any]:
     months = sorted({(r.get("check_date") or "")[:7] for r in rows if r.get("check_date")}, reverse=True)
     visa_types = sorted({(r.get("visa_type") or "").upper() for r in rows if r.get("visa_type")})
     consulates = sorted({r.get("consulate") or "" for r in rows if r.get("consulate")})
     statuses = sorted({r.get("status") or "" for r in rows if r.get("status")})
     entries = sorted({r.get("visa_entry") or "" for r in rows if r.get("visa_entry")})
+    major_categories_l1 = sorted({r.get("major_category_l1") or "" for r in rows if r.get("major_category_l1")})
+    major_categories_l2 = sorted({r.get("major_category_l2") or "" for r in rows if r.get("major_category_l2")})
+    major_category_mapping: dict[str, set[str]] = {}
+    for row in rows:
+        category_l1 = str(row.get("major_category_l1") or "").strip()
+        category_l2 = str(row.get("major_category_l2") or "").strip()
+        if not category_l1 or not category_l2:
+            continue
+        major_category_mapping.setdefault(category_l1, set()).add(category_l2)
+
+    major_category_mapping_sorted = {
+        category_l1: sorted(values)
+        for category_l1, values in sorted(major_category_mapping.items(), key=lambda item: item[0])
+    }
+
     majors = sorted({r.get("major") or "" for r in rows if r.get("major")})
     employers = sorted({r.get("detail_employer") or "" for r in rows if r.get("detail_employer")})
     detail_cities = sorted({r.get("detail_city") or "" for r in rows if r.get("detail_city")})
@@ -424,6 +445,9 @@ def options(rows: list[dict[str, str]]) -> dict[str, list[str]]:
         "consulates": consulates,
         "statuses": statuses,
         "entries": entries,
+        "major_categories_l1": major_categories_l1,
+        "major_categories_l2": major_categories_l2,
+        "major_category_mapping": major_category_mapping_sorted,
         "majors": majors,
         "employers": employers,
         "detail_cities": detail_cities,

@@ -17,6 +17,9 @@ from app.core.config import (
 from app.core.schemas import (
     AdminLoginRequest,
     AdminLogoutResponse,
+    MajorClassificationsResponse,
+    MajorOverrideMutationResponse,
+    MajorOverrideUpsertRequest,
     AdminSessionResponse,
     AdminSessionStateResponse,
     AnomalyRow,
@@ -54,6 +57,8 @@ def _filtered_rows(
     statuses: str | None,
     entries: str | None,
     months: str | None,
+    major_categories_l1: str | None,
+    major_categories_l2: str | None,
     majors: str | None,
     employers: str | None,
     detail_cities: str | None,
@@ -70,6 +75,8 @@ def _filtered_rows(
         statuses=_split_csv_values(statuses),
         entries=_split_csv_values(entries),
         months=_split_csv_values(months),
+        major_categories_l1=_split_csv_values(major_categories_l1),
+        major_categories_l2=_split_csv_values(major_categories_l2),
         majors=_split_csv_values(majors),
         employers=_split_csv_values(employers),
         detail_cities=_split_csv_values(detail_cities),
@@ -161,6 +168,43 @@ def admin_logout(request: Request) -> AdminLogoutResponse:
     return AdminLogoutResponse(success=True, message="logout success")
 
 
+@router.get("/admin/major-classifications", response_model=MajorClassificationsResponse)
+def admin_major_classifications(
+    request: Request,
+    q: str | None = Query(default=None),
+    limit: int = Query(default=500, ge=1, le=2000),
+) -> MajorClassificationsResponse:
+    _require_admin_session(request)
+    rows = service.get_cases()
+    payload = service.get_major_classifications(rows, query=q, limit=limit)
+    return MajorClassificationsResponse(**payload)
+
+
+@router.put("/admin/major-classifications", response_model=MajorOverrideMutationResponse)
+def admin_upsert_major_classifications(
+    req: MajorOverrideUpsertRequest,
+    request: Request,
+) -> MajorOverrideMutationResponse:
+    _require_admin_session(request)
+    updated = service.upsert_major_overrides(
+        [item.model_dump() for item in req.items],
+        operator="admin",
+    )
+    return MajorOverrideMutationResponse(success=True, updated=updated, message="major overrides updated")
+
+
+@router.delete("/admin/major-classifications", response_model=MajorOverrideMutationResponse)
+def admin_delete_major_classification(
+    request: Request,
+    major: str = Query(min_length=1),
+) -> MajorOverrideMutationResponse:
+    _require_admin_session(request)
+    deleted = service.delete_major_override(major)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="major override not found")
+    return MajorOverrideMutationResponse(success=True, updated=1, message="major override deleted")
+
+
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     has_data = len(service.get_cases()) > 0
@@ -217,6 +261,9 @@ def options() -> OptionsResponse:
             consulates=[],
             statuses=[],
             entries=[],
+            major_categories_l1=[],
+            major_categories_l2=[],
+            major_category_mapping={},
             majors=[],
             employers=[],
             detail_cities=[],
@@ -247,6 +294,8 @@ def cases(
     statuses: str | None = Query(default=None),
     entries: str | None = Query(default=None),
     months: str | None = Query(default=None),
+    major_categories_l1: str | None = Query(default=None),
+    major_categories_l2: str | None = Query(default=None),
     majors: str | None = Query(default=None),
     employers: str | None = Query(default=None),
     detail_cities: str | None = Query(default=None),
@@ -261,6 +310,8 @@ def cases(
         statuses,
         entries,
         months,
+        major_categories_l1,
+        major_categories_l2,
         majors,
         employers,
         detail_cities,
@@ -279,6 +330,8 @@ def overview(
     statuses: str | None = None,
     entries: str | None = None,
     months: str | None = None,
+    major_categories_l1: str | None = None,
+    major_categories_l2: str | None = None,
     majors: str | None = None,
     employers: str | None = None,
     detail_cities: str | None = None,
@@ -291,6 +344,8 @@ def overview(
         statuses,
         entries,
         months,
+        major_categories_l1,
+        major_categories_l2,
         majors,
         employers,
         detail_cities,
@@ -307,6 +362,8 @@ def monthly(
     statuses: str | None = None,
     entries: str | None = None,
     months: str | None = None,
+    major_categories_l1: str | None = None,
+    major_categories_l2: str | None = None,
     majors: str | None = None,
     employers: str | None = None,
     detail_cities: str | None = None,
@@ -319,6 +376,8 @@ def monthly(
         statuses,
         entries,
         months,
+        major_categories_l1,
+        major_categories_l2,
         majors,
         employers,
         detail_cities,
@@ -335,6 +394,8 @@ def sensitivity(
     statuses: str | None = None,
     entries: str | None = None,
     months: str | None = None,
+    major_categories_l1: str | None = None,
+    major_categories_l2: str | None = None,
     majors: str | None = None,
     employers: str | None = None,
     detail_cities: str | None = None,
@@ -347,6 +408,8 @@ def sensitivity(
         statuses,
         entries,
         months,
+        major_categories_l1,
+        major_categories_l2,
         majors,
         employers,
         detail_cities,
@@ -363,6 +426,8 @@ def cohorts(
     statuses: str | None = None,
     entries: str | None = None,
     months: str | None = None,
+    major_categories_l1: str | None = None,
+    major_categories_l2: str | None = None,
     majors: str | None = None,
     employers: str | None = None,
     detail_cities: str | None = None,
@@ -375,6 +440,8 @@ def cohorts(
         statuses,
         entries,
         months,
+        major_categories_l1,
+        major_categories_l2,
         majors,
         employers,
         detail_cities,
@@ -392,6 +459,8 @@ def distribution(
     statuses: str | None = None,
     entries: str | None = None,
     months: str | None = None,
+    major_categories_l1: str | None = None,
+    major_categories_l2: str | None = None,
     majors: str | None = None,
     employers: str | None = None,
     detail_cities: str | None = None,
@@ -404,6 +473,8 @@ def distribution(
         statuses,
         entries,
         months,
+        major_categories_l1,
+        major_categories_l2,
         majors,
         employers,
         detail_cities,
@@ -421,6 +492,8 @@ def comparison(
     statuses: str | None = None,
     entries: str | None = None,
     months: str | None = None,
+    major_categories_l1: str | None = None,
+    major_categories_l2: str | None = None,
     majors: str | None = None,
     employers: str | None = None,
     detail_cities: str | None = None,
@@ -433,6 +506,8 @@ def comparison(
         statuses,
         entries,
         months,
+        major_categories_l1,
+        major_categories_l2,
         majors,
         employers,
         detail_cities,
@@ -449,6 +524,8 @@ def anomalies(
     statuses: str | None = None,
     entries: str | None = None,
     months: str | None = None,
+    major_categories_l1: str | None = None,
+    major_categories_l2: str | None = None,
     majors: str | None = None,
     employers: str | None = None,
     detail_cities: str | None = None,
@@ -463,6 +540,8 @@ def anomalies(
         statuses,
         entries,
         months,
+        major_categories_l1,
+        major_categories_l2,
         majors,
         employers,
         detail_cities,
@@ -483,6 +562,8 @@ def export_report(
     statuses: str | None = None,
     entries: str | None = None,
     months: str | None = None,
+    major_categories_l1: str | None = None,
+    major_categories_l2: str | None = None,
     majors: str | None = None,
     employers: str | None = None,
     detail_cities: str | None = None,
@@ -495,6 +576,8 @@ def export_report(
         statuses,
         entries,
         months,
+        major_categories_l1,
+        major_categories_l2,
         majors,
         employers,
         detail_cities,
@@ -511,6 +594,8 @@ def export_cases_csv(
     statuses: str | None = None,
     entries: str | None = None,
     months: str | None = None,
+    major_categories_l1: str | None = None,
+    major_categories_l2: str | None = None,
     majors: str | None = None,
     employers: str | None = None,
     detail_cities: str | None = None,
@@ -523,6 +608,8 @@ def export_cases_csv(
         statuses,
         entries,
         months,
+        major_categories_l1,
+        major_categories_l2,
         majors,
         employers,
         detail_cities,
@@ -540,6 +627,9 @@ def export_cases_csv(
         "visa_entry",
         "consulate",
         "major",
+        "major_category_l1",
+        "major_category_l2",
+        "major_classification_source",
         "status",
         "check_date",
         "complete_date",

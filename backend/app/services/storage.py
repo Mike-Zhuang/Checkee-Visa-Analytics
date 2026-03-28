@@ -10,6 +10,10 @@ from typing import Any
 from app.core.config import CASES_CSV, DATA_DIR, META_JSON, MONTHLY_CSV, REPORT_MD
 
 
+MAJOR_TAXONOMY_JSON = DATA_DIR / "major_taxonomy_rules.json"
+MAJOR_OVERRIDES_JSON = DATA_DIR / "major_overrides.json"
+
+
 def ensure_data_dir() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -74,3 +78,60 @@ def load_meta() -> dict[str, Any]:
     if not META_JSON.exists():
         return {}
     return json.loads(META_JSON.read_text(encoding="utf-8"))
+
+
+def load_major_taxonomy() -> dict[str, Any]:
+    if not MAJOR_TAXONOMY_JSON.exists():
+        return {}
+    return json.loads(MAJOR_TAXONOMY_JSON.read_text(encoding="utf-8"))
+
+
+def save_major_taxonomy(data: dict[str, Any]) -> None:
+    ensure_data_dir()
+    MAJOR_TAXONOMY_JSON.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def load_major_overrides() -> dict[str, dict[str, Any]]:
+    if not MAJOR_OVERRIDES_JSON.exists():
+        return {}
+
+    payload = json.loads(MAJOR_OVERRIDES_JSON.read_text(encoding="utf-8"))
+    items = payload.get("items") if isinstance(payload, dict) else []
+
+    result: dict[str, dict[str, Any]] = {}
+    for item in items or []:
+        major_norm = str(item.get("major_norm") or "").strip()
+        if not major_norm:
+            continue
+        result[major_norm] = {
+            "major": str(item.get("major") or "").strip(),
+            "category_l1": str(item.get("category_l1") or "Other").strip() or "Other",
+            "category_l2": str(item.get("category_l2") or "Unspecified").strip() or "Unspecified",
+            "updated_at": str(item.get("updated_at") or "").strip(),
+            "updated_by": str(item.get("updated_by") or "").strip(),
+        }
+    return result
+
+
+def save_major_overrides(overrides: dict[str, dict[str, Any]]) -> None:
+    ensure_data_dir()
+    items = []
+    for major_norm in sorted(overrides):
+        value = overrides[major_norm]
+        items.append(
+            {
+                "major_norm": major_norm,
+                "major": str(value.get("major") or "").strip(),
+                "category_l1": str(value.get("category_l1") or "Other").strip() or "Other",
+                "category_l2": str(value.get("category_l2") or "Unspecified").strip() or "Unspecified",
+                "updated_at": str(value.get("updated_at") or "").strip(),
+                "updated_by": str(value.get("updated_by") or "").strip(),
+            }
+        )
+
+    payload = {
+        "version": 1,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "items": items,
+    }
+    MAJOR_OVERRIDES_JSON.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -31,6 +31,13 @@ export default function CaseTable({ rows, total, page, pageSize, onPageChange, o
         return parts.length > 0 ? parts.join(' / ') : '-'
     }
 
+    const sourceLabel = (source: string): string => {
+        if (source === 'manual') return t('cases.classificationSourceManual')
+        if (source === 'auto') return t('cases.classificationSourceAuto')
+        if (source === 'not_applicable') return t('cases.classificationSourceNotApplicable')
+        return t('cases.classificationSourceUnknown')
+    }
+
     return (
         <section className="panel" role="region" aria-labelledby="cases-title">
             <div className="panel-head">
@@ -72,7 +79,19 @@ export default function CaseTable({ rows, total, page, pageSize, onPageChange, o
                                 <td>{r.visa_type}</td>
                                 <td>{r.visa_entry}</td>
                                 <td>{r.consulate}</td>
-                                <td>{r.major || '-'}</td>
+                                <td>
+                                    <div className="major-cell">
+                                        <span className="major-primary">{r.major || '-'}</span>
+                                        <small className="major-secondary">
+                                            {(r.major_category_l1 || '-')}
+                                            {' / '}
+                                            {(r.major_category_l2 || '-')}
+                                        </small>
+                                        <small className={`major-source major-source-${r.major_classification_source || 'unknown'}`}>
+                                            {sourceLabel(r.major_classification_source || 'unknown')}
+                                        </small>
+                                    </div>
+                                </td>
                                 <td>{r.detail_employer || '-'}</td>
                                 <td>{detailLocation(r.detail_city, r.detail_state)}</td>
                                 <td>{r.status}</td>
@@ -102,7 +121,7 @@ export default function CaseTable({ rows, total, page, pageSize, onPageChange, o
                 </button>
                 <label className="page-size" htmlFor="page-size-select">
                     {t('cases.perPage')}
-                    <select id="page-size-select" value={String(pageSize)} onChange={(e) => onPageSizeChange(Number(e.currentTarget.value))}>
+                    <select id="page-size-select" className="select-modern" value={String(pageSize)} onChange={(e) => onPageSizeChange(Number(e.currentTarget.value))}>
                         {frontendConfig.pageSizeOptions.map((item) => (
                             <option key={item} value={String(item)}>{item}</option>
                         ))}

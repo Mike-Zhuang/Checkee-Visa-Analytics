@@ -1,3 +1,5 @@
+import { useEffect, useMemo } from 'react'
+import type { ReactNode } from 'react'
 import type { ConsulateGroup, Filters, OptionsResponse, RefreshPayload } from '../types'
 import { useTranslation } from 'react-i18next'
 
@@ -20,13 +22,19 @@ type Props = {
     onRefresh: (payload: RefreshPayload) => void
 }
 
-function MultiSelect({
+function PillMultiSelect({
     id,
     label,
     hint,
     values,
     selected,
-    onPick
+    onPick,
+    onClear,
+    clearText,
+    className,
+    emptyLabel,
+    listClassName,
+    footer
 }: {
     id: string
     label: string
@@ -34,26 +42,50 @@ function MultiSelect({
     values: string[]
     selected: string[]
     onPick: (v: string[]) => void
+    onClear?: () => void
+    clearText?: string
+    className?: string
+    emptyLabel?: string
+    listClassName?: string
+    footer?: ReactNode
 }) {
+    const selectedSet = new Set(selected)
     return (
-        <label className="field" htmlFor={id}>
-            <span id={`${id}-label`}>{label}</span>
-            <select
-                id={id}
-                multiple
-                value={selected}
-                aria-labelledby={`${id}-label`}
-                onChange={(e) => {
-                    const next = Array.from(e.currentTarget.selectedOptions).map((o) => o.value)
-                    onPick(next)
-                }}
-            >
-                {values.map((v) => (
-                    <option key={v} value={v}>{v}</option>
-                ))}
-            </select>
+        <div className={`field pill-multi ${className ?? ''}`.trim()} role="group" aria-labelledby={`${id}-label`}>
+            <div className="field-head">
+                <span id={`${id}-label`}>{label}</span>
+                <div className="field-head-meta">
+                    <small>{selected.length}/{values.length}</small>
+                    {onClear ? (
+                        <button type="button" className="ghost mini" onClick={onClear} disabled={selected.length === 0}>
+                            {clearText ?? 'Clear'}
+                        </button>
+                    ) : null}
+                </div>
+            </div>
+            <div className={`pill-list ${listClassName ?? ''}`.trim()} role="listbox" aria-multiselectable="true" aria-labelledby={`${id}-label`}>
+                {values.length === 0 ? (
+                    <span className="pill-empty">{emptyLabel ?? '-'}</span>
+                ) : (
+                    values.map((value) => {
+                        const isActive = selectedSet.has(value)
+                        return (
+                            <button
+                                key={value}
+                                type="button"
+                                className={`pill-item ${isActive ? 'active' : ''}`}
+                                aria-pressed={isActive}
+                                onClick={() => onPick(toggleValue(selected, value))}
+                            >
+                                {value}
+                            </button>
+                        )
+                    })
+                )}
+            </div>
+            {footer ? <div className="pill-footer">{footer}</div> : null}
             {hint ? <small className="field-help">{hint}</small> : null}
-        </label>
+        </div>
     )
 }
 
@@ -160,12 +192,72 @@ export default function FilterBar({
         }
     })
 
+    const resolveLinkedMajorCategoryL2 = (selectedL1: string[]): string[] => {
+        if (selectedL1.length === 0) {
+            return options.major_categories_l2
+        }
+
+        const merged = new Set<string>()
+        let hasUnmapped = false
+
+        for (const categoryL1 of selectedL1) {
+            const mapped = options.major_category_mapping[categoryL1] ?? []
+            if (mapped.length === 0) {
+                hasUnmapped = true
+                continue
+            }
+            for (const categoryL2 of mapped) {
+                merged.add(categoryL2)
+            }
+        }
+
+        if (hasUnmapped || merged.size === 0) {
+            return options.major_categories_l2
+        }
+
+        return options.major_categories_l2.filter((categoryL2) => merged.has(categoryL2))
+    }
+
+    const majorCategoryL2Options = useMemo(
+        () => resolveLinkedMajorCategoryL2(filters.major_categories_l1),
+        [filters.major_categories_l1, options.major_categories_l2, options.major_category_mapping]
+    )
+    const majorCategoryL2OptionSet = useMemo(() => new Set(majorCategoryL2Options), [majorCategoryL2Options])
+    const majorCategoryL2Hint =
+        filters.major_categories_l1.length === 0
+            ? t('filter.majorCategoryL2Hint')
+            : majorCategoryL2Options.length === 0
+                ? t('filter.majorCategoryL2Empty')
+                : t('filter.majorCategoryL2LinkedHint', {
+                    l1Count: filters.major_categories_l1.length,
+                    l2Count: majorCategoryL2Options.length
+                })
+
+    useEffect(() => {
+        const nextL2 = filters.major_categories_l2.filter((value) => majorCategoryL2OptionSet.has(value))
+        if (nextL2.length === filters.major_categories_l2.length) {
+            return
+        }
+
+        onChange({ ...filters, major_categories_l2: nextL2 })
+    }, [filters, majorCategoryL2OptionSet, onChange])
+
     const chips = [
         ...filters.visa_types.map((v) => ({ field: 'visa_types' as const, value: v, label: t('filter.chipVisa', { value: v }) })),
         ...filters.months.map((v) => ({ field: 'months' as const, value: v, label: t('filter.chipMonth', { value: v }) })),
         ...filters.consulates.map((v) => ({ field: 'consulates' as const, value: v, label: t('filter.chipConsulate', { value: v }) })),
         ...filters.statuses.map((v) => ({ field: 'statuses' as const, value: v, label: t('filter.chipStatus', { value: v }) })),
         ...filters.entries.map((v) => ({ field: 'entries' as const, value: v, label: t('filter.chipEntry', { value: v }) })),
+        ...filters.major_categories_l1.map((v) => ({
+            field: 'major_categories_l1' as const,
+            value: v,
+            label: t('filter.chipMajorCategoryL1', { value: v })
+        })),
+        ...filters.major_categories_l2.map((v) => ({
+            field: 'major_categories_l2' as const,
+            value: v,
+            label: t('filter.chipMajorCategoryL2', { value: v })
+        })),
         ...filters.majors.map((v) => ({ field: 'majors' as const, value: v, label: t('filter.chipMajor', { value: v }) })),
         ...filters.employers.map((v) => ({ field: 'employers' as const, value: v, label: t('filter.chipEmployer', { value: v }) })),
         ...filters.detail_cities.map((v) => ({ field: 'detail_cities' as const, value: v, label: t('filter.chipDetailCity', { value: v }) })),
@@ -345,29 +437,25 @@ export default function FilterBar({
                                 clearText={t('filter.clearOne')}
                             />
                         ) : null}
-                        <label className="field" htmlFor="filter-months">
-                            <span id="filter-months-label">{t('filter.months')}</span>
-                            <select
-                                id="filter-months"
-                                multiple
-                                value={filters.months}
-                                aria-labelledby="filter-months-label"
-                                onChange={(e) => {
-                                    const next = Array.from(e.currentTarget.selectedOptions).map((o) => o.value)
-                                    onChange({ ...filters, months: next })
-                                }}
-                            >
-                                {options.months.map((v) => (
-                                    <option key={v} value={v}>{v}</option>
-                                ))}
-                            </select>
-                            <div className="quick-actions">
-                                <button type="button" className="ghost" onClick={() => applyRecentMonths(3)}>{t('filter.quick3')}</button>
-                                <button type="button" className="ghost" onClick={() => applyRecentMonths(6)}>{t('filter.quick6')}</button>
-                                <button type="button" className="ghost" onClick={() => applyRecentMonths(12)}>{t('filter.quick12')}</button>
-                            </div>
-                            <small className="field-help">{t('filter.monthsHint')}</small>
-                        </label>
+                        <PillMultiSelect
+                            id="filter-months"
+                            label={t('filter.months')}
+                            hint={t('filter.monthsHint')}
+                            values={options.months}
+                            selected={filters.months}
+                            onPick={(v) => onChange({ ...filters, months: v })}
+                            onClear={() => onChange({ ...filters, months: [] })}
+                            clearText={t('filter.clearOne')}
+                            className="filter-months"
+                            emptyLabel={t('filter.emptyOptions')}
+                            footer={(
+                                <div className="quick-actions">
+                                    <button type="button" className="ghost" onClick={() => applyRecentMonths(3)}>{t('filter.quick3')}</button>
+                                    <button type="button" className="ghost" onClick={() => applyRecentMonths(6)}>{t('filter.quick6')}</button>
+                                    <button type="button" className="ghost" onClick={() => applyRecentMonths(12)}>{t('filter.quick12')}</button>
+                                </div>
+                            )}
+                        />
                         <CheckboxGroup
                             title={t('filter.statuses')}
                             hint={t('filter.statusesHint')}
@@ -385,6 +473,40 @@ export default function FilterBar({
                             onPick={(v) => onChange({ ...filters, entries: v })}
                             onClear={() => onChange({ ...filters, entries: [] })}
                             clearText={t('filter.clearOne')}
+                        />
+                        <PillMultiSelect
+                            id="filter-major-category-l1"
+                            label={t('filter.majorCategoryL1')}
+                            hint={t('filter.majorCategoryL1Hint')}
+                            values={options.major_categories_l1}
+                            selected={filters.major_categories_l1}
+                            onPick={(v) => {
+                                const linkedL2Set = new Set(resolveLinkedMajorCategoryL2(v))
+                                onChange({
+                                    ...filters,
+                                    major_categories_l1: v,
+                                    major_categories_l2: filters.major_categories_l2.filter((item) => linkedL2Set.has(item))
+                                })
+                            }}
+                            onClear={() => onChange({ ...filters, major_categories_l1: [], major_categories_l2: [] })}
+                            clearText={t('filter.clearOne')}
+                            className="filter-major-l1"
+                            emptyLabel={t('filter.emptyOptions')}
+                        />
+                        <PillMultiSelect
+                            id="filter-major-category-l2"
+                            label={t('filter.majorCategoryL2')}
+                            hint={majorCategoryL2Hint}
+                            values={majorCategoryL2Options}
+                            selected={filters.major_categories_l2}
+                            onPick={(v) => onChange({
+                                ...filters,
+                                major_categories_l2: v.filter((item) => majorCategoryL2OptionSet.has(item))
+                            })}
+                            onClear={() => onChange({ ...filters, major_categories_l2: [] })}
+                            clearText={t('filter.clearOne')}
+                            className="filter-major-l2"
+                            emptyLabel={t('filter.emptyOptions')}
                         />
                         {!showConsulateGroups ? (
                             <CheckboxGroup
@@ -406,37 +528,53 @@ export default function FilterBar({
                         <p>{t('filter.detailFiltersHint')}</p>
                     </div>
                     <div className="filter-grid filter-grid-detail">
-                        <MultiSelect
+                        <PillMultiSelect
                             id="filter-majors"
                             label={t('filter.majors')}
                             hint={t('filter.majorsHint')}
                             values={options.majors}
                             selected={filters.majors}
                             onPick={(v) => onChange({ ...filters, majors: v })}
+                            onClear={() => onChange({ ...filters, majors: [] })}
+                            clearText={t('filter.clearOne')}
+                            className="filter-detail-pill"
+                            emptyLabel={t('filter.emptyOptions')}
                         />
-                        <MultiSelect
+                        <PillMultiSelect
                             id="filter-employers"
                             label={t('filter.employers')}
                             hint={t('filter.employersHint')}
                             values={options.employers}
                             selected={filters.employers}
                             onPick={(v) => onChange({ ...filters, employers: v })}
+                            onClear={() => onChange({ ...filters, employers: [] })}
+                            clearText={t('filter.clearOne')}
+                            className="filter-detail-pill"
+                            emptyLabel={t('filter.emptyOptions')}
                         />
-                        <MultiSelect
+                        <PillMultiSelect
                             id="filter-detail-cities"
                             label={t('filter.detailCities')}
                             hint={t('filter.detailCitiesHint')}
                             values={options.detail_cities}
                             selected={filters.detail_cities}
                             onPick={(v) => onChange({ ...filters, detail_cities: v })}
+                            onClear={() => onChange({ ...filters, detail_cities: [] })}
+                            clearText={t('filter.clearOne')}
+                            className="filter-detail-pill"
+                            emptyLabel={t('filter.emptyOptions')}
                         />
-                        <MultiSelect
+                        <PillMultiSelect
                             id="filter-detail-states"
                             label={t('filter.detailStates')}
                             hint={t('filter.detailStatesHint')}
                             values={options.detail_states}
                             selected={filters.detail_states}
                             onPick={(v) => onChange({ ...filters, detail_states: v })}
+                            onClear={() => onChange({ ...filters, detail_states: [] })}
+                            clearText={t('filter.clearOne')}
+                            className="filter-detail-pill"
+                            emptyLabel={t('filter.emptyOptions')}
                         />
                     </div>
                 </section>

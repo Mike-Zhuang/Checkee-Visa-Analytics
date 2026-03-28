@@ -11,6 +11,8 @@ describe('api paramsFromFilters', () => {
             statuses: ['Pending'],
             entries: ['I20'],
             months: ['2026-03', '2026-02'],
+            major_categories_l1: ['STEM'],
+            major_categories_l2: ['Engineering'],
             majors: ['CS'],
             employers: ['Google'],
             detail_cities: ['Beijing'],
@@ -22,6 +24,8 @@ describe('api paramsFromFilters', () => {
         expect(params.get('visa_types')).toBe('F1,H1B')
         expect(params.get('consulates')).toBe('BeiJing')
         expect(params.get('months')).toBe('2026-03,2026-02')
+        expect(params.get('major_categories_l1')).toBe('STEM')
+        expect(params.get('major_categories_l2')).toBe('Engineering')
         expect(params.get('majors')).toBe('CS')
         expect(params.get('employers')).toBe('Google')
         expect(params.get('search_text')).toBe('stem case')
@@ -34,6 +38,8 @@ describe('api paramsFromFilters', () => {
             statuses: [],
             entries: [],
             months: [],
+            major_categories_l1: [],
+            major_categories_l2: [],
             majors: [],
             employers: [],
             detail_cities: [],

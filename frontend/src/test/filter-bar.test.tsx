@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -11,6 +11,12 @@ const options: OptionsResponse = {
     consulates: ['BeiJing', 'Toronto'],
     statuses: ['Pending', 'Clear'],
     entries: ['I20', 'I129'],
+    major_categories_l1: ['STEM', 'Business'],
+    major_categories_l2: ['AI & Data', 'Engineering', 'Finance & Accounting'],
+    major_category_mapping: {
+        STEM: ['AI & Data', 'Engineering'],
+        Business: ['Finance & Accounting']
+    },
     majors: ['CS', 'Math'],
     employers: ['Google', 'Amazon'],
     detail_cities: ['Beijing', 'Toronto'],
@@ -29,6 +35,8 @@ const emptyFilters: Filters = {
     statuses: [],
     entries: [],
     months: [],
+    major_categories_l1: [],
+    major_categories_l2: [],
     majors: [],
     employers: [],
     detail_cities: [],
@@ -92,6 +100,37 @@ describe('FilterBar', () => {
         expect(onChange).toHaveBeenCalledWith({
             ...emptyFilters,
             months: ['2026-03', '2026-02', '2026-01', '2025-12', '2025-11', '2025-10']
+        })
+    })
+
+    it('点击月份胶囊应触发 months 更新', async () => {
+        const onChange = vi.fn()
+        const user = userEvent.setup()
+
+        render(
+            <FilterBar
+                options={options}
+                consulateGroups={groups}
+                filters={emptyFilters}
+                refreshFromMonth=""
+                refreshSources={['monthly_track']}
+                availableRefreshSources={options.fetch_sources}
+                defaultRefreshMonths={6}
+                showConsulateGroups={true}
+                isRefreshing={false}
+                refreshFeedback={null}
+                onRefreshFromMonthChange={vi.fn()}
+                onRefreshSourcesChange={vi.fn()}
+                onChange={onChange}
+                onReset={vi.fn()}
+                onRefresh={vi.fn()}
+            />
+        )
+
+        await user.click(screen.getByRole('button', { name: '2026-03' }))
+        expect(onChange).toHaveBeenCalledWith({
+            ...emptyFilters,
+            months: ['2026-03']
         })
     })
 
@@ -212,6 +251,101 @@ describe('FilterBar', () => {
 
         expect(screen.queryByRole('button', { name: '开始刷新数据' })).not.toBeInTheDocument()
         expect(screen.getByRole('button', { name: '重置筛选' })).toBeInTheDocument()
+    })
+
+    it('点击专业一级胶囊应触发 major_categories_l1 更新', async () => {
+        const onChange = vi.fn()
+        const user = userEvent.setup()
+
+        render(
+            <FilterBar
+                options={options}
+                consulateGroups={groups}
+                filters={emptyFilters}
+                refreshFromMonth=""
+                refreshSources={['monthly_track']}
+                availableRefreshSources={options.fetch_sources}
+                defaultRefreshMonths={6}
+                showConsulateGroups={true}
+                isRefreshing={false}
+                refreshFeedback={null}
+                onRefreshFromMonthChange={vi.fn()}
+                onRefreshSourcesChange={vi.fn()}
+                onChange={onChange}
+                onReset={vi.fn()}
+                onRefresh={vi.fn()}
+            />
+        )
+
+        await user.click(screen.getByRole('button', { name: 'STEM' }))
+        expect(onChange).toHaveBeenCalledWith({
+            ...emptyFilters,
+            major_categories_l1: ['STEM'],
+            major_categories_l2: []
+        })
+    })
+
+    it('点击雇主胶囊应触发 employers 更新', async () => {
+        const onChange = vi.fn()
+        const user = userEvent.setup()
+
+        render(
+            <FilterBar
+                options={options}
+                consulateGroups={groups}
+                filters={emptyFilters}
+                refreshFromMonth=""
+                refreshSources={['monthly_track']}
+                availableRefreshSources={options.fetch_sources}
+                defaultRefreshMonths={6}
+                showConsulateGroups={true}
+                isRefreshing={false}
+                refreshFeedback={null}
+                onRefreshFromMonthChange={vi.fn()}
+                onRefreshSourcesChange={vi.fn()}
+                onChange={onChange}
+                onReset={vi.fn()}
+                onRefresh={vi.fn()}
+            />
+        )
+
+        await user.click(screen.getByRole('button', { name: 'Google' }))
+        expect(onChange).toHaveBeenCalledWith({
+            ...emptyFilters,
+            employers: ['Google']
+        })
+    })
+
+    it('一级分类变化后应自动清理无效二级分类', async () => {
+        const onChange = vi.fn()
+
+        render(
+            <FilterBar
+                options={options}
+                consulateGroups={groups}
+                filters={{ ...emptyFilters, major_categories_l1: ['Business'], major_categories_l2: ['Engineering'] }}
+                refreshFromMonth=""
+                refreshSources={['monthly_track']}
+                availableRefreshSources={options.fetch_sources}
+                defaultRefreshMonths={6}
+                showConsulateGroups={true}
+                isRefreshing={false}
+                refreshFeedback={null}
+                onRefreshFromMonthChange={vi.fn()}
+                onRefreshSourcesChange={vi.fn()}
+                onChange={onChange}
+                onReset={vi.fn()}
+                onRefresh={vi.fn()}
+            />
+        )
+
+        await waitFor(() => {
+            expect(onChange).toHaveBeenCalledWith({
+                ...emptyFilters,
+                major_categories_l1: ['Business'],
+                major_categories_l2: []
+            })
+        })
     })
 
     it('输入文本搜索应触发 search_text 更新', async () => {

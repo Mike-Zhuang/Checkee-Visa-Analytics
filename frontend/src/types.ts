@@ -4,6 +4,9 @@ export type OptionsResponse = {
     consulates: string[]
     statuses: string[]
     entries: string[]
+    major_categories_l1: string[]
+    major_categories_l2: string[]
+    major_category_mapping: Record<string, string[]>
     majors: string[]
     employers: string[]
     detail_cities: string[]
@@ -102,6 +105,9 @@ export type CaseItem = {
     visa_entry: string
     consulate: string
     major: string
+    major_category_l1: string
+    major_category_l2: string
+    major_classification_source: 'manual' | 'auto' | 'unknown' | string
     status: string
     check_date: string
     complete_date: string
@@ -123,6 +129,8 @@ export type Filters = {
     statuses: string[]
     entries: string[]
     months: string[]
+    major_categories_l1: string[]
+    major_categories_l2: string[]
     majors: string[]
     employers: string[]
     detail_cities: string[]
@@ -188,4 +196,24 @@ export type AnomalyItem = {
     reason: string
     detail_url: string
     update_url: string
+}
+
+export type MajorClassificationItem = {
+    major: string
+    major_normalized: string
+    count: number
+    auto_category_l1: string
+    auto_category_l2: string
+    effective_category_l1: string
+    effective_category_l2: string
+    source: 'manual' | 'auto' | 'not_applicable' | 'unknown'
+    has_manual_override: boolean
+    override_updated_at?: string | null
+}
+
+export type MajorClassificationsResponse = {
+    total: number
+    items: MajorClassificationItem[]
+    category_l1_options: string[]
+    category_l2_options: string[]
 }
