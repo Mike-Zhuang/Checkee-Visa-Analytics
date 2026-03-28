@@ -9,7 +9,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)
 ![Status](https://img.shields.io/badge/Status-Active-success)
-[![Stars](https://img.shields.io/github/stars/Mike-Zhuang/check_analyse_3.27?style=social)](https://github.com/Mike-Zhuang/check_analyse_3.27/stargazers)
+[![Stars](https://img.shields.io/github/stars/Mike-Zhuang/Checkee-Visa-Analytics?style=social)](https://github.com/Mike-Zhuang/Checkee-Visa-Analytics/stargazers)
 
 全签证类型实时抓取与可视化分析平台（FastAPI + React + TypeScript）
 
@@ -18,11 +18,13 @@
 ## 目录
 
 - [项目亮点](#项目亮点)
+- [近期更新（v0.5.0）](#近期更新v050)
 - [功能清单](#功能清单)
 - [技术架构](#技术架构)
 - [快速开始](#快速开始)
 - [环境变量配置](#环境变量配置)
 - [本地调试](#本地调试)
+- [管理端入口](#管理端入口)
 - [测试与质量门禁](#测试与质量门禁)
 - [国际化与可访问性](#国际化与可访问性)
 - [API 概览](#api-概览)
@@ -38,9 +40,18 @@ Checkee Visa Analytics 是一个面向签证申请数据分析的全栈项目，
 
 - 跨签证类型聚合分析（F1/H1/B1/J1/O1/L1 等）
 - 右删失场景下的稳健统计（中位数、P90、敏感性区间）
-- 可交互筛选与月度趋势分析
+- 可交互筛选与月度趋势分析（核心筛选 + 详情筛选）
+- 专业自动归类与人工覆盖（L1/L2）
 - 一键刷新抓取、导出报告与 CSV
 - 本地开发友好（VS Code 任务 + 调试配置）
+
+## 近期更新（v0.5.0）
+
+- 新增专业归类系统：`manual` / `auto` / `unknown` / `not_applicable`。
+- 新增管理员专业归类面板：支持分组查看、单行覆盖保存、删除覆盖。
+- 公共分析链路新增专业一级/二级筛选，支持端到端查询与导出。
+- 筛选区交互统一升级为胶囊/分组式选择器，并统一控件颗粒度与间距。
+- 公共页面空态文案与权限语义优化：无权限场景不再提示普通用户执行刷新操作。
 
 ## 功能清单
 
@@ -54,15 +65,18 @@ Checkee Visa Analytics 是一个面向签证申请数据分析的全栈项目，
   - 月度统计：Pending 比率、成熟度、分布指标
   - 敏感性分析：Conservative / Neutral / Aggressive 三口径
 - 前端交互
-  - 多维筛选（月份、签证类型、领馆、状态、New/Renewal）
+  - 多维筛选（月份、签证类型、领馆、状态、New/Renewal、专业 L1/L2）
+  - 详情筛选（专业、雇主、城市、州）统一胶囊式交互
   - 领馆按国家/地区分组筛选（后端统一分组配置）
   - 筛选条件标签可视化、最近 N 月快捷选择
   - 案例明细分页与空态提示
   - 局部容错加载（单接口失败不拖垮整页）
   - 趋势图 + 明细表联动
   - 一键导出 Markdown 报告与 CSV
+  - 管理端专业归类运营面板（按来源分组 + 人工覆盖）
 - 工程化能力
   - 前后端环境变量配置化（默认值可覆盖）
+  - 管理员登录会话与后端刷新权限控制
   - 前端中英双语切换（i18n）与功能开关
   - 关键页面 a11y 语义增强（aria/label/caption/focus-visible）
   - 后端 pytest 基线 + 前端 Vitest/RTL 基线
@@ -184,6 +198,11 @@ cp .env.example .env
 - `VITE_ENABLE_LANGUAGE_SWITCH`：是否显示语言切换
 - `VITE_ENABLE_SENSITIVITY`：是否显示敏感性分析模块
 - `VITE_ENABLE_CONSULATE_GROUPS`：是否显示领馆分组筛选
+- `VITE_ENABLE_PUBLIC_REFRESH`：公开页是否允许手动刷新
+- `VITE_ENABLE_ADMIN_PAGE`：是否启用管理端页面
+- `VITE_ADMIN_ROUTE_PATH`：管理端路由路径（默认 `/admin-ops`）
+- `VITE_ADMIN_REQUIRE_ACCESS_CODE`：是否要求前端访问码
+- `VITE_ADMIN_ACCESS_CODE`：前端访问码（可选）
 
 ## 本地调试
 
@@ -203,6 +222,17 @@ cp .env.example .env
 - `.vscode/tasks.json`
 - `.vscode/launch.json`
 - `.vscode/settings.json`
+
+## 管理端入口
+
+- 默认管理端地址：`/admin-ops`（可由 `VITE_ADMIN_ROUTE_PATH` 调整）。
+- 管理端主要能力：
+  - 登录后触发手动刷新
+  - 查看刷新历史
+  - 维护专业归类人工覆盖（L1/L2）
+- 生产环境建议：
+  - 开启后端刷新鉴权（`CHECKEE_REFRESH_REQUIRE_ADMIN_KEY=true`）
+  - 配置强密码 `CHECKEE_ADMIN_REFRESH_KEY`
 
 ## 测试与质量门禁
 
@@ -284,8 +314,14 @@ GitHub Actions 工作流位于 `.github/workflows/ci.yml`，在 `push`/`pull_req
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
+| POST | `/api/v1/admin/login` | 管理员登录，获取会话 token |
+| GET | `/api/v1/admin/session` | 校验管理员会话状态 |
+| POST | `/api/v1/admin/logout` | 注销管理员会话 |
+| GET | `/api/v1/admin/major-classifications` | 获取专业归类列表（支持搜索） |
+| PUT | `/api/v1/admin/major-classifications` | 批量写入专业人工覆盖 |
+| DELETE | `/api/v1/admin/major-classifications` | 删除单个专业人工覆盖 |
 | GET | `/api/v1/health` | 健康检查 |
-| POST | `/api/v1/tasks/refresh` | 触发抓取刷新（支持 from_month） |
+| POST | `/api/v1/tasks/refresh` | 触发抓取刷新（支持 from_month，生产建议鉴权） |
 | GET | `/api/v1/meta/options` | 获取筛选项 |
 | GET | `/api/v1/meta/consulate-groups` | 获取领馆国家/地区分组 |
 | GET | `/api/v1/meta/state` | 获取刷新状态 |
@@ -309,16 +345,19 @@ GitHub Actions 工作流位于 `.github/workflows/ci.yml`，在 `push`/`pull_req
 │       └── ci.yml
 ├── backend/
 │   ├── app/
+│   │   └── services/
+│   │       └── major_classifier.py
+│   ├── data/
 │   │   ├── api/
 │   │   ├── core/
-│   │   └── services/
 │   ├── tests/
 │   └── .env.example
 │   └── data/
 ├── frontend/
 │   ├── src/
-│   │   ├── components/
-│   │   ├── locales/
+│   │   ├── api.ts
+│   │   ├── App.tsx
+│   │   └── AdminPage.tsx
 │   │   └── test/
 │   │   ├── api.ts
 │   │   └── App.tsx
@@ -354,6 +393,7 @@ GitHub Actions 工作流位于 `.github/workflows/ci.yml`，在 `push`/`pull_req
 
 - from_month 优先于 months。
 - 后端会应用月份安全上限保护，并在响应中返回 truncated_by_limit 与 month_limit。
+- 当 `CHECKEE_REFRESH_REQUIRE_ADMIN_KEY=true` 时，刷新接口需要管理员权限。
 
 ## 公网部署（VPS）
 
@@ -371,6 +411,8 @@ GitHub Actions 工作流位于 `.github/workflows/ci.yml`，在 `push`/`pull_req
 - [x] 增加测试体系（后端 pytest + 前端 Vitest/RTL）
 - [x] 增加部署模板（VPS: Nginx + systemd）
 - [x] 增加权限与配置管理（环境变量化）
+- [x] 增加专业归类自动化与人工覆盖运营能力
+- [x] 统一筛选区交互（胶囊/分组式）与视觉颗粒度
 - [ ] 增加更高覆盖率目标与回归集扩展
 
 ## 贡献指南
