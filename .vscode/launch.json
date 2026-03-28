@@ -5,6 +5,7 @@
             "name": "Backend (Uvicorn Debug)",
             "type": "python",
             "request": "launch",
+            "envFile": "${workspaceFolder}/backend/.env",
             "module": "uvicorn",
             "args": [
                 "app.main:app",

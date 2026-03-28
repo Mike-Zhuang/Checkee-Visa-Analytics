@@ -15,6 +15,25 @@ class RefreshRequest(BaseModel):
     sources: list[str] | None = Field(default=None, min_length=1)
 
 
+class AdminLoginRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=256)
+
+
+class AdminSessionResponse(BaseModel):
+    token: str
+    expires_at: datetime
+
+
+class AdminSessionStateResponse(BaseModel):
+    authenticated: bool
+    expires_at: datetime
+
+
+class AdminLogoutResponse(BaseModel):
+    success: bool
+    message: str
+
+
 class RefreshResponse(BaseModel):
     success: bool
     message: str

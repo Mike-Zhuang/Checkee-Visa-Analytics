@@ -124,6 +124,16 @@ export type RefreshPayload = {
     sources?: string[]
 }
 
+export type AdminLoginResponse = {
+    token: string
+    expires_at: string
+}
+
+export type AdminSessionStateResponse = {
+    authenticated: boolean
+    expires_at: string
+}
+
 export type CohortItem = {
     cohort: string
     total_cases: number

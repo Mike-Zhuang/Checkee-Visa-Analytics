@@ -746,6 +746,26 @@ button.mini {
     width: 100%;
 }
 
+.admin-auth-state {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    font-size: 13px;
+    color: #2a4a61;
+}
+
+.admin-auth-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 2px 10px;
+    border: 1px solid #b7dfc4;
+    background: #e9f8ee;
+    color: #1d6436;
+    font-weight: 700;
+}
+
 .admin-meta-grid {
     margin-top: 2px;
 }

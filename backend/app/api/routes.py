@@ -9,11 +9,16 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 
 from app.core.config import (
     ADMIN_REFRESH_KEY,
+    ADMIN_SESSION_TTL_SECONDS,
     API_DEFAULT_CASES_LIMIT,
     API_MAX_CASES_LIMIT,
     REFRESH_REQUIRE_ADMIN_KEY,
 )
 from app.core.schemas import (
+    AdminLoginRequest,
+    AdminLogoutResponse,
+    AdminSessionResponse,
+    AdminSessionStateResponse,
     AnomalyRow,
     CohortStatsRow,
     ComparisonResponse,
@@ -27,6 +32,7 @@ from app.core.schemas import (
 from app.services.data_service import service
 from app.services.data_service import RefreshRateLimitError
 from app.services.scraper import list_supported_sources
+from app.services.admin_auth import create_admin_session, get_session_expiry, revoke_admin_session
 
 router = APIRouter(prefix="/api/v1", tags=["checkee"])
 
@@ -66,6 +72,11 @@ def _require_admin_refresh_key(request: Request) -> None:
     if not REFRESH_REQUIRE_ADMIN_KEY:
         return
 
+    bearer_token = _extract_bearer_token(request.headers.get("Authorization"))
+    if bearer_token:
+        if get_session_expiry(bearer_token) is not None:
+            return
+
     key = ADMIN_REFRESH_KEY.strip()
     if not key:
         service.record_refresh_event(
@@ -80,11 +91,64 @@ def _require_admin_refresh_key(request: Request) -> None:
         remote_addr = request.client.host if request.client else "unknown"
         service.record_refresh_event(
             status="denied",
-            message="admin refresh key invalid",
+            message="admin auth invalid",
+            triggered_by="manual",
+            details={"remote_addr": remote_addr, "has_bearer": bool(bearer_token)},
+        )
+        raise HTTPException(status_code=403, detail="admin auth invalid")
+
+
+def _extract_bearer_token(authorization: str | None) -> str:
+    if not authorization:
+        return ""
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer":
+        return ""
+    return token.strip()
+
+
+def _require_admin_session(request: Request) -> datetime:
+    token = _extract_bearer_token(request.headers.get("Authorization"))
+    expires_at = get_session_expiry(token)
+    if expires_at is None:
+        raise HTTPException(status_code=401, detail="admin session invalid or expired")
+    return expires_at
+
+
+@router.post("/admin/login", response_model=AdminSessionResponse)
+def admin_login(req: AdminLoginRequest, request: Request) -> AdminSessionResponse:
+    required_key = ADMIN_REFRESH_KEY.strip()
+    if not required_key:
+        raise HTTPException(status_code=503, detail="admin login key is not configured")
+
+    provided = req.password.strip()
+    if not provided or not secrets.compare_digest(provided, required_key):
+        remote_addr = request.client.host if request.client else "unknown"
+        service.record_refresh_event(
+            status="denied",
+            message="admin login failed",
             triggered_by="manual",
             details={"remote_addr": remote_addr},
         )
-        raise HTTPException(status_code=403, detail="admin refresh key invalid")
+        raise HTTPException(status_code=401, detail="admin password invalid")
+
+    session = create_admin_session(ADMIN_SESSION_TTL_SECONDS)
+    return AdminSessionResponse(token=session.token, expires_at=session.expires_at)
+
+
+@router.get("/admin/session", response_model=AdminSessionStateResponse)
+def admin_session(request: Request) -> AdminSessionStateResponse:
+    expires_at = _require_admin_session(request)
+    return AdminSessionStateResponse(authenticated=True, expires_at=expires_at)
+
+
+@router.post("/admin/logout", response_model=AdminLogoutResponse)
+def admin_logout(request: Request) -> AdminLogoutResponse:
+    token = _extract_bearer_token(request.headers.get("Authorization"))
+    if not token:
+        raise HTTPException(status_code=401, detail="admin session invalid or expired")
+    revoke_admin_session(token)
+    return AdminLogoutResponse(success=True, message="logout success")
 
 
 @router.get("/health", response_model=HealthResponse)

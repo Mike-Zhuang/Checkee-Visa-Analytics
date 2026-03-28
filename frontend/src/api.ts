@@ -1,4 +1,6 @@
 import type {
+    AdminLoginResponse,
+    AdminSessionStateResponse,
     AnomalyItem,
     CaseItem,
     CohortItem,
@@ -56,11 +58,16 @@ async function parseErrorDetail(response: Response): Promise<string> {
     return ''
 }
 
-async function refreshDataInternal(payload: RefreshPayload, adminKey?: string): Promise<void> {
+async function refreshDataInternal(payload: RefreshPayload, adminKey?: string, adminToken?: string): Promise<void> {
     const headers: HeadersInit = { 'Content-Type': 'application/json' }
     const normalizedAdminKey = adminKey?.trim()
     if (normalizedAdminKey) {
         headers['X-Admin-Key'] = normalizedAdminKey
+    }
+
+    const normalizedAdminToken = adminToken?.trim()
+    if (normalizedAdminToken) {
+        headers.Authorization = `Bearer ${normalizedAdminToken}`
     }
 
     const res = await fetch(`${API_BASE}/tasks/refresh`, {
@@ -83,6 +90,48 @@ export async function refreshDataAsAdmin(
     adminKey: string
 ): Promise<void> {
     return refreshDataInternal(payload, adminKey)
+}
+
+export async function refreshDataWithSession(
+    payload: RefreshPayload = { all_months: false, months: 6 },
+    adminToken: string
+): Promise<void> {
+    return refreshDataInternal(payload, undefined, adminToken)
+}
+
+export async function loginAdmin(password: string): Promise<AdminLoginResponse> {
+    const res = await fetch(`${API_BASE}/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`admin login failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as AdminLoginResponse
+}
+
+export async function getAdminSession(adminToken: string): Promise<AdminSessionStateResponse> {
+    const res = await fetch(`${API_BASE}/admin/session`, {
+        headers: { Authorization: `Bearer ${adminToken.trim()}` }
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`admin session failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as AdminSessionStateResponse
+}
+
+export async function logoutAdmin(adminToken: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/admin/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken.trim()}` }
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`admin logout failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
 }
 
 export async function getMetaState(): Promise<MetaState> {

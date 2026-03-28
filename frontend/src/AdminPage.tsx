@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { getMetaState, getOptions, refreshDataAsAdmin } from './api'
+import { getAdminSession, getMetaState, getOptions, loginAdmin, logoutAdmin, refreshDataWithSession } from './api'
 import { frontendConfig } from './config'
 import type { MetaState, OptionsResponse, RefreshHistoryItem, RefreshPayload } from './types'
 
@@ -41,9 +41,16 @@ function detectGlassTier(): GlassTier {
 
 export default function AdminPage() {
     const { t, i18n } = useTranslation()
-    const [adminKey, setAdminKey] = useState('')
-    const [accessCodeInput, setAccessCodeInput] = useState('')
-    const [accessCodeError, setAccessCodeError] = useState<string | null>(null)
+    const [adminPassword, setAdminPassword] = useState('')
+    const [adminToken, setAdminToken] = useState<string>(() => {
+        if (typeof window === 'undefined') {
+            return ''
+        }
+        return window.sessionStorage.getItem('checkee-admin-token') ?? ''
+    })
+    const [sessionExpiresAt, setSessionExpiresAt] = useState<string | null>(null)
+    const [authError, setAuthError] = useState<string | null>(null)
+    const [isAuthenticating, setIsAuthenticating] = useState(false)
     const [refreshFromMonth, setRefreshFromMonth] = useState('')
     const [refreshSources, setRefreshSources] = useState<string[]>(['monthly_track'])
     const [lastAttemptPayload, setLastAttemptPayload] = useState<RefreshPayload | null>(null)
@@ -53,16 +60,15 @@ export default function AdminPage() {
     const [isRefreshing, setIsRefreshing] = useState(false)
     const [loadError, setLoadError] = useState<string | null>(null)
     const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
-    const [uiUnlocked, setUiUnlocked] = useState<boolean>(() => {
-        if (!frontendConfig.adminRequireAccessCode) {
-            return true
-        }
-        if (typeof window === 'undefined') {
-            return false
-        }
-        return window.sessionStorage.getItem('checkee-admin-ui-unlocked') === '1'
-    })
     const [glassTier, setGlassTier] = useState<GlassTier>(() => detectGlassTier())
+
+    const clearAdminSession = useCallback(() => {
+        setAdminToken('')
+        setSessionExpiresAt(null)
+        if (typeof window !== 'undefined') {
+            window.sessionStorage.removeItem('checkee-admin-token')
+        }
+    }, [])
 
     useEffect(() => {
         const updateTier = () => setGlassTier(detectGlassTier())
@@ -176,12 +182,8 @@ export default function AdminPage() {
     })
 
     const onAdminRefresh = async (overridePayload?: RefreshPayload) => {
-        if (!adminKey.trim()) {
-            setFeedback({ kind: 'error', message: t('admin.keyRequired') })
-            return
-        }
-        if (!uiUnlocked) {
-            setFeedback({ kind: 'error', message: t('admin.accessCodeRequired') })
+        if (!adminToken.trim()) {
+            setFeedback({ kind: 'error', message: t('admin.loginRequired') })
             return
         }
 
@@ -195,45 +197,115 @@ export default function AdminPage() {
         setIsRefreshing(true)
         setFeedback(null)
         try {
-            await refreshDataAsAdmin(payload, adminKey)
+            await refreshDataWithSession(payload, adminToken)
             await loadMetaAndOptions()
             setFeedback({ kind: 'success', message: t('admin.refreshSuccess') })
         } catch (error) {
             const message = error instanceof Error ? error.message : t('admin.refreshFailed')
+            if (message.includes('401') || message.includes('403')) {
+                clearAdminSession()
+                setAuthError(t('admin.sessionExpired'))
+            }
             setFeedback({ kind: 'error', message: `${t('admin.refreshFailed')}: ${message}` })
         } finally {
             setIsRefreshing(false)
         }
     }
 
-    const unlockAdminUi = () => {
-        if (!frontendConfig.adminRequireAccessCode) {
-            setUiUnlocked(true)
+    const onLogin = async () => {
+        if (!adminPassword.trim()) {
+            setAuthError(t('admin.passwordRequired'))
             return
         }
 
-        const requiredCode = frontendConfig.adminAccessCode.trim()
-        if (!requiredCode) {
-            setAccessCodeError(t('admin.accessCodeNotConfigured'))
-            return
-        }
-
-        if (accessCodeInput !== requiredCode) {
-            setAccessCodeError(t('admin.accessCodeInvalid'))
-            return
-        }
-
-        setAccessCodeError(null)
-        setUiUnlocked(true)
-        if (typeof window !== 'undefined') {
-            window.sessionStorage.setItem('checkee-admin-ui-unlocked', '1')
+        setIsAuthenticating(true)
+        setAuthError(null)
+        try {
+            const loginResult = await loginAdmin(adminPassword.trim())
+            setAdminToken(loginResult.token)
+            setSessionExpiresAt(loginResult.expires_at)
+            setAdminPassword('')
+            if (typeof window !== 'undefined') {
+                window.sessionStorage.setItem('checkee-admin-token', loginResult.token)
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : t('admin.loginFailed')
+            setAuthError(`${t('admin.loginFailed')}: ${message}`)
+        } finally {
+            setIsAuthenticating(false)
         }
     }
 
+    const onLogout = async () => {
+        const token = adminToken
+        clearAdminSession()
+        setAuthError(null)
+        setFeedback(null)
+        try {
+            if (token) {
+                await logoutAdmin(token)
+            }
+        } catch {
+            // 用户本地状态已经清理，后端登出失败不阻断界面退出
+        }
+    }
+
+    useEffect(() => {
+        if (!adminToken.trim()) {
+            return
+        }
+
+        let cancelled = false
+
+        const verifySession = async () => {
+            try {
+                const session = await getAdminSession(adminToken)
+                if (cancelled) {
+                    return
+                }
+                setSessionExpiresAt(session.expires_at)
+                setAuthError(null)
+            } catch {
+                if (cancelled) {
+                    return
+                }
+                clearAdminSession()
+                setAuthError(t('admin.sessionExpired'))
+            }
+        }
+
+        void verifySession()
+
+        return () => {
+            cancelled = true
+        }
+    }, [adminToken, clearAdminSession, t])
+
     const languageValue = i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'zh'
     const history = metaState?.refresh_history ?? []
+    const showLoginGate = !adminToken.trim()
+    const sessionExpiresAtDisplay = useMemo(() => {
+        if (!sessionExpiresAt) {
+            return null
+        }
 
-    const showAccessGate = frontendConfig.adminRequireAccessCode && !uiUnlocked
+        const date = new Date(sessionExpiresAt)
+        if (Number.isNaN(date.getTime())) {
+            return sessionExpiresAt
+        }
+
+        const locale = languageValue === 'en' ? 'en-US' : 'zh-CN'
+        return new Intl.DateTimeFormat(locale, {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+            timeZoneName: 'short'
+        }).format(date)
+    }, [languageValue, sessionExpiresAt])
 
     return (
         <main className={`app-shell glass-tier-${glassTier} admin-shell`}>
@@ -259,31 +331,38 @@ export default function AdminPage() {
                 </div>
             </header>
 
-            {showAccessGate ? (
-                <section className="panel admin-panel" role="region" aria-labelledby="admin-access-title">
+            {showLoginGate ? (
+                <section className="panel admin-panel" role="region" aria-labelledby="admin-login-title">
                     <div className="panel-head">
-                        <h3 id="admin-access-title">{t('admin.accessGateTitle')}</h3>
-                        <p>{t('admin.accessGateHint')}</p>
+                        <h3 id="admin-login-title">{t('admin.loginTitle')}</h3>
+                        <p>{t('admin.loginHint')}</p>
                     </div>
                     <div className="admin-grid">
-                        <label className="field field-inline" htmlFor="admin-access-code">
-                            <span>{t('admin.accessCodeLabel')}</span>
+                        <label className="field field-inline" htmlFor="admin-password">
+                            <span>{t('admin.passwordLabel')}</span>
                             <input
-                                id="admin-access-code"
+                                id="admin-password"
                                 type="password"
-                                value={accessCodeInput}
+                                value={adminPassword}
                                 autoComplete="off"
-                                placeholder={t('admin.accessCodePlaceholder')}
-                                onChange={(e) => setAccessCodeInput(e.currentTarget.value)}
+                                placeholder={t('admin.passwordPlaceholder')}
+                                onChange={(e) => setAdminPassword(e.currentTarget.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        void onLogin()
+                                    }
+                                }}
                             />
-                            <small className="field-help">{t('admin.accessCodeHelp')}</small>
+                            <small className="field-help">{t('admin.passwordHelp')}</small>
                         </label>
                     </div>
 
-                    {accessCodeError ? <div className="refresh-feedback error">{accessCodeError}</div> : null}
+                    {authError ? <div className="refresh-feedback error">{authError}</div> : null}
 
                     <div className="actions">
-                        <button type="button" onClick={unlockAdminUi}>{t('admin.unlock')}</button>
+                        <button type="button" disabled={isAuthenticating} onClick={() => void onLogin()}>
+                            {isAuthenticating ? t('admin.logining') : t('admin.loginNow')}
+                        </button>
                     </div>
                 </section>
             ) : null}
@@ -297,27 +376,13 @@ export default function AdminPage() {
                 {loadError ? <div className="error-box">{loadError}</div> : null}
 
                 <div className="admin-grid">
-                    <label className="field field-inline" htmlFor="admin-key">
-                        <span>{t('admin.keyLabel')}</span>
-                        <input
-                            id="admin-key"
-                            type="password"
-                            value={adminKey}
-                            autoComplete="off"
-                            placeholder={t('admin.keyPlaceholder')}
-                            disabled={showAccessGate || isRefreshing}
-                            onChange={(e) => setAdminKey(e.currentTarget.value)}
-                        />
-                        <small className="field-help">{t('admin.keyHelp')}</small>
-                    </label>
-
                     <label className="field field-inline" htmlFor="admin-refresh-from-month">
                         <span>{t('filter.refreshFromMonth')}</span>
                         <input
                             id="admin-refresh-from-month"
                             type="month"
                             value={refreshFromMonth}
-                            disabled={showAccessGate || isRefreshing}
+                            disabled={showLoginGate || isRefreshing}
                             onChange={(e) => setRefreshFromMonth(e.currentTarget.value)}
                         />
                         <small className="field-help">
@@ -325,6 +390,15 @@ export default function AdminPage() {
                         </small>
                     </label>
                 </div>
+
+                {!showLoginGate ? (
+                    <div className="admin-auth-state">
+                        <span className="admin-auth-badge">{t('admin.loggedIn')}</span>
+                        {sessionExpiresAtDisplay ? <span>{t('admin.sessionValidUntil', { value: sessionExpiresAtDisplay })}</span> : null}
+                    </div>
+                ) : null}
+
+                {authError && !showLoginGate ? <div className="refresh-feedback error">{authError}</div> : null}
 
                 <fieldset className="refresh-sources-panel admin-sources">
                     <span>{t('filter.refreshSources')}</span>
@@ -335,7 +409,7 @@ export default function AdminPage() {
                                 <input
                                     type="checkbox"
                                     checked={refreshSources.includes(source)}
-                                    disabled={showAccessGate || isRefreshing}
+                                    disabled={showLoginGate || isRefreshing}
                                     onChange={() => toggleSource(source)}
                                 />
                                 <span className="source-title">{sourceName(source)}</span>
@@ -345,16 +419,19 @@ export default function AdminPage() {
                 </fieldset>
 
                 <div className="actions">
-                    <button type="button" disabled={isLoading || isRefreshing || showAccessGate} onClick={() => void onAdminRefresh()}>
+                    <button type="button" disabled={isLoading || isRefreshing || showLoginGate} onClick={() => void onAdminRefresh()}>
                         {isRefreshing ? t('filter.refreshing') : t('admin.refreshNow')}
                     </button>
                     <button
                         type="button"
                         className="ghost"
-                        disabled={isLoading || isRefreshing || showAccessGate || !lastAttemptPayload}
+                        disabled={isLoading || isRefreshing || showLoginGate || !lastAttemptPayload}
                         onClick={() => void onAdminRefresh(lastAttemptPayload ?? undefined)}
                     >
                         {t('admin.retryLast')}
+                    </button>
+                    <button type="button" className="ghost" disabled={showLoginGate} onClick={() => void onLogout()}>
+                        {t('admin.logout')}
                     </button>
                     <button type="button" className="ghost" disabled={isLoading || isRefreshing} onClick={() => void loadMetaAndOptions()}>
                         {t('admin.reloadState')}
