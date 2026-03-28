@@ -168,6 +168,14 @@ body {
     -webkit-backdrop-filter: blur(5px) saturate(120%);
 }
 
+.app-shell.glass-tier-full .filter-card .consulate-visa-block,
+.app-shell.glass-tier-full .filter-card .consulate-country-block {
+    background: rgba(248, 252, 255, 0.7);
+    border-color: rgba(154, 183, 205, 0.78);
+    backdrop-filter: blur(4px) saturate(116%);
+    -webkit-backdrop-filter: blur(4px) saturate(116%);
+}
+
 .app-shell.glass-tier-lite .hero {
     background: var(--glass-bg-lite);
     border: 1px solid var(--glass-border-lite);
@@ -197,6 +205,12 @@ body {
 .app-shell.glass-tier-lite .filter-card .refresh-sources-panel {
     background: rgba(255, 255, 255, 0.94);
     border-color: rgba(188, 206, 222, 1);
+}
+
+.app-shell.glass-tier-lite .filter-card .consulate-visa-block,
+.app-shell.glass-tier-lite .filter-card .consulate-country-block {
+    background: rgba(252, 255, 255, 0.84);
+    border-color: rgba(173, 196, 214, 0.82);
 }
 
 .app-shell.glass-tier-lite .hero-actions a,
@@ -501,11 +515,40 @@ body {
 }
 
 .consulate-section {
-    margin-top: 12px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed rgba(126, 152, 173, 0.45);
+    display: grid;
+    gap: 12px;
 }
 
 .consulate-section h4 {
+    margin: 0;
+}
+
+.consulate-visa-block,
+.consulate-country-block {
+    border: 1px solid rgba(163, 188, 208, 0.62);
+    border-radius: 12px;
+    padding: 10px;
+    background: rgba(250, 253, 255, 0.76);
+}
+
+.consulate-country-block {
+    background: rgba(247, 251, 255, 0.82);
+}
+
+.consulate-subtitle {
     margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #264860;
+}
+
+.consulate-subhint {
+    margin: 0 0 8px;
+    font-size: 12px;
+    color: #4a6174;
 }
 
 .consulate-groups {
@@ -518,7 +561,7 @@ body {
     border: 1px solid var(--line);
     border-radius: 10px;
     padding: 8px;
-    background: #fbfdff;
+    background: rgba(255, 255, 255, 0.9);
 }
 
 .consulate-group legend {

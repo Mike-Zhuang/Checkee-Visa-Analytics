@@ -351,43 +351,50 @@ export default function FilterBar({
             {showConsulateGroups ? (
                 <div className="consulate-section">
                     <h4>{t('filter.groupedConsulates')}</h4>
-                    <CheckboxGroup
-                        title={t('filter.visaTypes')}
-                        hint={t('filter.visaTypesHint')}
-                        values={options.visa_types}
-                        selected={filters.visa_types}
-                        onPick={(v) => onChange({ ...filters, visa_types: v })}
-                        onClear={() => onChange({ ...filters, visa_types: [] })}
-                        clearText={t('filter.clearOne')}
-                    />
-                    <div className="consulate-groups">
-                        {consulateGroups.map((group) => (
-                            <fieldset className="consulate-group" key={group.key}>
-                                <div className="consulate-group-title">
-                                    <legend>{t(`filter.groupName.${group.key}`, { defaultValue: group.label })}</legend>
-                                    <div className="consulate-group-actions">
-                                        <button type="button" className="ghost mini" onClick={() => toggleConsulateGroup(group)}>
-                                            {t('filter.toggleGroup')}
-                                        </button>
-                                        <button type="button" className="ghost mini" onClick={() => clearConsulateGroup(group)}>
-                                            {t('filter.clearGroup')}
-                                        </button>
+                    <div className="consulate-visa-block">
+                        <p className="consulate-subtitle">{t('filter.visaPrefilterTitle')}</p>
+                        <CheckboxGroup
+                            title={t('filter.visaTypes')}
+                            hint={t('filter.visaTypesHint')}
+                            values={options.visa_types}
+                            selected={filters.visa_types}
+                            onPick={(v) => onChange({ ...filters, visa_types: v })}
+                            onClear={() => onChange({ ...filters, visa_types: [] })}
+                            clearText={t('filter.clearOne')}
+                        />
+                    </div>
+                    <div className="consulate-country-block">
+                        <p className="consulate-subtitle">{t('filter.consulateGroupTitle')}</p>
+                        <p className="consulate-subhint">{t('filter.consulateGroupHint')}</p>
+                        <div className="consulate-groups">
+                            {consulateGroups.map((group) => (
+                                <fieldset className="consulate-group" key={group.key}>
+                                    <div className="consulate-group-title">
+                                        <legend>{t(`filter.groupName.${group.key}`, { defaultValue: group.label })}</legend>
+                                        <div className="consulate-group-actions">
+                                            <button type="button" className="ghost mini" onClick={() => toggleConsulateGroup(group)}>
+                                                {t('filter.toggleGroup')}
+                                            </button>
+                                            <button type="button" className="ghost mini" onClick={() => clearConsulateGroup(group)}>
+                                                {t('filter.clearGroup')}
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="consulate-items">
-                                    {group.consulates.map((city) => (
-                                        <label key={city} className="consulate-item">
-                                            <input
-                                                type="checkbox"
-                                                checked={filters.consulates.includes(city)}
-                                                onChange={() => onChange({ ...filters, consulates: toggleValue(filters.consulates, city) })}
-                                            />
-                                            <span>{city}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            </fieldset>
-                        ))}
+                                    <div className="consulate-items">
+                                        {group.consulates.map((city) => (
+                                            <label key={city} className="consulate-item">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={filters.consulates.includes(city)}
+                                                    onChange={() => onChange({ ...filters, consulates: toggleValue(filters.consulates, city) })}
+                                                />
+                                                <span>{city}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </fieldset>
+                            ))}
+                        </div>
                     </div>
                 </div>
             ) : null}

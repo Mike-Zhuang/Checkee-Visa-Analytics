@@ -55,6 +55,9 @@
         "consulates": "领馆",
         "consulatesHint": "按领馆筛选，便于比较不同地区。",
         "groupedConsulates": "领馆（按国家/地区分组）",
+        "visaPrefilterTitle": "第一步：先按签证类型粗筛（可选）",
+        "consulateGroupTitle": "第二步：再按国家/地区选领馆",
+        "consulateGroupHint": "建议先选签证类型，再选国家/地区，层次更清晰。",
         "groupName": {
             "china": "中国",
             "canada": "加拿大",

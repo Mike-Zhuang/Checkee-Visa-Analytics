@@ -55,6 +55,9 @@
         "consulates": "Consulates",
         "consulatesHint": "Compare cases by interview location.",
         "groupedConsulates": "Consulates by country/region",
+        "visaPrefilterTitle": "Step 1: pre-filter by visa type (optional)",
+        "consulateGroupTitle": "Step 2: choose consulates by country/region",
+        "consulateGroupHint": "Start with visa type, then narrow down by country/region for cleaner selection.",
         "groupName": {
             "china": "China",
             "canada": "Canada",
