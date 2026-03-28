@@ -31,12 +31,24 @@ export type MetaState = {
     has_data: boolean
     current_case_count: number
     data_freshness_seconds: number | null
+    refresh_min_interval_seconds?: number
+    refresh_available_in_seconds?: number
+    last_refresh_result?: RefreshHistoryItem
+    refresh_history?: RefreshHistoryItem[]
     fetched_month_range: {
         latest: string | null
         earliest: string | null
     }
     selected_sources?: string[]
     supported_sources?: string[]
+}
+
+export type RefreshHistoryItem = {
+    occurred_at: string
+    status: 'success' | 'error' | 'blocked' | 'denied' | string
+    message: string
+    triggered_by: string
+    details?: Record<string, unknown>
 }
 
 export type OverviewStats = {

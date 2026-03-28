@@ -13,6 +13,7 @@
     --glass-border-lite: rgba(255, 255, 255, 0.24);
     --glass-blur-full: 18px;
     --glass-blur-lite: 8px;
+    --hero-text-shadow: 0 2px 14px rgba(8, 24, 38, 0.34);
 }
 
 * {
@@ -51,7 +52,7 @@ body {
 
 .hero p {
     margin: 0;
-    opacity: 0.9;
+    opacity: 0.94;
 }
 
 .hero-actions {
@@ -92,11 +93,11 @@ body {
 
 .app-shell.glass-tier-full .hero {
     position: relative;
-    background: var(--glass-bg-full);
+    background: linear-gradient(132deg, rgba(10, 46, 80, 0.58), rgba(20, 92, 138, 0.42));
     border: 1px solid var(--glass-border-full);
-    backdrop-filter: blur(var(--glass-blur-full)) saturate(148%);
-    -webkit-backdrop-filter: blur(var(--glass-blur-full)) saturate(148%);
-    box-shadow: 0 14px 34px rgba(13, 59, 102, 0.2);
+    backdrop-filter: blur(14px) saturate(138%);
+    -webkit-backdrop-filter: blur(14px) saturate(138%);
+    box-shadow: 0 14px 34px rgba(13, 59, 102, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.18);
     overflow: hidden;
 }
 
@@ -108,14 +109,36 @@ body {
     pointer-events: none;
 }
 
+.app-shell.glass-tier-full .hero::after {
+    content: '';
+    position: absolute;
+    width: 280px;
+    height: 180px;
+    right: -56px;
+    top: -88px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.23) 0%, rgba(255, 255, 255, 0.05) 45%, rgba(255, 255, 255, 0) 74%);
+    pointer-events: none;
+}
+
+.app-shell.glass-tier-full .hero>* {
+    position: relative;
+    z-index: 1;
+}
+
+.app-shell.glass-tier-full .hero h1,
+.app-shell.glass-tier-full .hero p,
+.app-shell.glass-tier-full .lang-switch span {
+    text-shadow: var(--hero-text-shadow);
+}
+
 .app-shell.glass-tier-full .hero-actions a,
 .app-shell.glass-tier-full .lang-switch select {
     color: #fff;
-    background: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.18);
     border: 1px solid rgba(255, 255, 255, 0.46);
-    backdrop-filter: blur(11px) saturate(142%);
-    -webkit-backdrop-filter: blur(11px) saturate(142%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 8px 20px rgba(8, 27, 44, 0.24);
+    backdrop-filter: blur(8px) saturate(132%);
+    -webkit-backdrop-filter: blur(8px) saturate(132%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 6px 16px rgba(8, 27, 44, 0.2);
     transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
@@ -177,11 +200,17 @@ body {
 }
 
 .app-shell.glass-tier-lite .hero {
-    background: var(--glass-bg-lite);
+    background: linear-gradient(130deg, rgba(11, 52, 89, 0.88), rgba(21, 95, 143, 0.78));
     border: 1px solid var(--glass-border-lite);
-    backdrop-filter: blur(var(--glass-blur-lite)) saturate(122%);
-    -webkit-backdrop-filter: blur(var(--glass-blur-lite)) saturate(122%);
-    box-shadow: 0 8px 20px rgba(10, 32, 50, 0.2);
+    backdrop-filter: blur(6px) saturate(116%);
+    -webkit-backdrop-filter: blur(6px) saturate(116%);
+    box-shadow: 0 8px 20px rgba(10, 32, 50, 0.18);
+}
+
+.app-shell.glass-tier-lite .hero h1,
+.app-shell.glass-tier-lite .hero p,
+.app-shell.glass-tier-lite .lang-switch span {
+    text-shadow: 0 1px 10px rgba(7, 20, 31, 0.28);
 }
 
 .app-shell.glass-tier-lite .filter-card {
@@ -221,6 +250,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
     .app-shell.glass-tier-full .hero-actions a,
     .app-shell.glass-tier-full .lang-switch select {
         transition: none;
@@ -271,6 +301,16 @@ body {
 
 .meta-core strong {
     font-size: 14px;
+}
+
+.public-refresh-off {
+    color: #7a3f00;
+    background: #fff2de;
+    border: 1px solid #f3ce9b;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 12px;
+    font-weight: 600;
 }
 
 .meta-more {
@@ -421,7 +461,7 @@ body {
     background: #fcfdff;
 }
 
-.refresh-sources-panel > span {
+.refresh-sources-panel>span {
     color: #2a4a61;
     font-weight: 600;
     font-size: 13px;
@@ -483,6 +523,11 @@ body {
 .actions.compact {
     margin-top: 0;
     align-items: flex-end;
+}
+
+.filter-only-actions {
+    margin-top: 10px;
+    justify-content: flex-end;
 }
 
 .quick-actions {
@@ -682,6 +727,100 @@ button.mini {
     gap: 4px;
 }
 
+.admin-shell {
+    gap: 16px;
+}
+
+.admin-panel {
+    display: grid;
+    gap: 12px;
+}
+
+.admin-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 10px;
+}
+
+.admin-sources {
+    width: 100%;
+}
+
+.admin-meta-grid {
+    margin-top: 2px;
+}
+
+.admin-history {
+    border-top: 1px dashed rgba(129, 153, 171, 0.45);
+    padding-top: 10px;
+    display: grid;
+    gap: 8px;
+}
+
+.admin-history h4 {
+    margin: 0;
+    font-size: 14px;
+}
+
+.admin-history-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 8px;
+}
+
+.admin-history-list li {
+    border: 1px solid #d8e4ec;
+    border-radius: 10px;
+    padding: 8px 10px;
+    background: #fbfdff;
+    display: grid;
+    gap: 6px;
+}
+
+.admin-history-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.admin-history-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.admin-status {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.admin-status.status-success {
+    color: #175f32;
+    background: #e5f6ea;
+    border: 1px solid #bfe3cc;
+}
+
+.admin-status.status-blocked {
+    color: #7a4a00;
+    background: #fff3de;
+    border: 1px solid #f2d3a2;
+}
+
+.admin-status.status-denied,
+.admin-status.status-error {
+    color: #812433;
+    background: #fee9ec;
+    border: 1px solid #f5c1c8;
+}
+
 .chart-read-guide {
     margin-bottom: 8px;
     display: grid;
@@ -868,8 +1007,9 @@ thead {
     }
 
     .app-shell.glass-tier-full .hero {
-        backdrop-filter: blur(12px) saturate(136%);
-        -webkit-backdrop-filter: blur(12px) saturate(136%);
+        background: linear-gradient(132deg, rgba(10, 46, 80, 0.68), rgba(20, 92, 138, 0.56));
+        backdrop-filter: blur(10px) saturate(126%);
+        -webkit-backdrop-filter: blur(10px) saturate(126%);
     }
 
     .app-shell.glass-tier-full .filter-card {
@@ -883,7 +1023,8 @@ thead {
     }
 
     .field-inline,
-    .refresh-sources-panel {
+    .refresh-sources-panel,
+    .admin-sources {
         min-width: 100%;
     }
 
@@ -913,10 +1054,19 @@ thead {
 }
 
 @media (max-width: 560px) {
+
     .app-shell.glass-tier-full .hero,
     .app-shell.glass-tier-lite .hero {
-        backdrop-filter: blur(8px) saturate(122%);
-        -webkit-backdrop-filter: blur(8px) saturate(122%);
+        backdrop-filter: blur(5px) saturate(112%);
+        -webkit-backdrop-filter: blur(5px) saturate(112%);
+    }
+
+    .app-shell.glass-tier-full .hero {
+        background: linear-gradient(132deg, rgba(10, 46, 80, 0.78), rgba(20, 92, 138, 0.68));
+    }
+
+    .app-shell.glass-tier-lite .hero {
+        background: linear-gradient(130deg, rgba(11, 52, 89, 0.92), rgba(21, 95, 143, 0.84));
     }
 
     .app-shell.glass-tier-full .filter-card,

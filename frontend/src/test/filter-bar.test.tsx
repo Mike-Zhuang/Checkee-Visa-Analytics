@@ -178,4 +178,30 @@ describe('FilterBar', () => {
             consulates: ['Toronto']
         })
     })
+
+    it('公开只读模式下不显示刷新按钮', () => {
+        render(
+            <FilterBar
+                options={options}
+                consulateGroups={groups}
+                filters={emptyFilters}
+                refreshFromMonth=""
+                refreshSources={['monthly_track']}
+                availableRefreshSources={options.fetch_sources}
+                defaultRefreshMonths={6}
+                showConsulateGroups={true}
+                showRefreshControls={false}
+                isRefreshing={false}
+                refreshFeedback={null}
+                onRefreshFromMonthChange={vi.fn()}
+                onRefreshSourcesChange={vi.fn()}
+                onChange={vi.fn()}
+                onReset={vi.fn()}
+                onRefresh={vi.fn()}
+            />
+        )
+
+        expect(screen.queryByRole('button', { name: '开始刷新数据' })).not.toBeInTheDocument()
+        expect(screen.getByRole('button', { name: '重置筛选' })).toBeInTheDocument()
+    })
 })

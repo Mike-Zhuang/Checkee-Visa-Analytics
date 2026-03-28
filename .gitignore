@@ -37,6 +37,7 @@ frontend/.env.local
 frontend/.env.development.local
 frontend/.env.test.local
 frontend/.env.production.local
+deploy/env/backend.env
 
 # Generated runtime data
 backend/data/*

@@ -10,6 +10,7 @@ type Props = {
     availableRefreshSources: string[]
     defaultRefreshMonths: number
     showConsulateGroups: boolean
+    showRefreshControls?: boolean
     isRefreshing: boolean
     refreshFeedback: { kind: 'success' | 'error'; message: string } | null
     onRefreshFromMonthChange: (value: string) => void
@@ -125,6 +126,7 @@ export default function FilterBar({
     availableRefreshSources,
     defaultRefreshMonths,
     showConsulateGroups,
+    showRefreshControls = true,
     isRefreshing,
     refreshFeedback,
     onRefreshFromMonthChange,
@@ -134,6 +136,7 @@ export default function FilterBar({
     onRefresh
 }: Props) {
     const { t } = useTranslation()
+    const titleText = showRefreshControls ? t('filter.title') : t('filter.titleReadonly')
 
     const sourceMeta = availableRefreshSources.map((source) => {
         if (source === 'monthly_track') {
@@ -199,72 +202,80 @@ export default function FilterBar({
 
     return (
         <section className="filter-card" role="region" aria-labelledby="filters-title">
-            <h3 id="filters-title">{t('filter.title')}</h3>
+            <h3 id="filters-title">{titleText}</h3>
             <div className="hint-list" id="filters-hint">
                 <p>{t('filter.hintSelect')}</p>
                 <p>{t('filter.hintEmptyMeansAll')}</p>
-                <p>{t('filter.hintHistory')}</p>
+                {showRefreshControls ? <p>{t('filter.hintHistory')}</p> : null}
             </div>
 
-            <div className="refresh-row">
-                <label className="field field-inline" htmlFor="refresh-from-month">
-                    <span>{t('filter.refreshFromMonth')}</span>
-                    <input
-                        id="refresh-from-month"
-                        type="month"
-                        value={refreshFromMonth}
-                        aria-describedby="filters-hint"
-                        disabled={isRefreshing}
-                        onChange={(e) => onRefreshFromMonthChange(e.currentTarget.value)}
-                    />
-                    <small className="field-help">
-                        {t('filter.refreshFromMonthHelp', { months: defaultRefreshMonths })}
-                    </small>
-                </label>
+            {showRefreshControls ? (
+                <>
+                    <div className="refresh-row">
+                        <label className="field field-inline" htmlFor="refresh-from-month">
+                            <span>{t('filter.refreshFromMonth')}</span>
+                            <input
+                                id="refresh-from-month"
+                                type="month"
+                                value={refreshFromMonth}
+                                aria-describedby="filters-hint"
+                                disabled={isRefreshing}
+                                onChange={(e) => onRefreshFromMonthChange(e.currentTarget.value)}
+                            />
+                            <small className="field-help">
+                                {t('filter.refreshFromMonthHelp', { months: defaultRefreshMonths })}
+                            </small>
+                        </label>
 
-                <fieldset className="refresh-sources-panel" aria-describedby="filters-hint">
-                    <span>{t('filter.refreshSources')}</span>
-                    <small className="field-help">{t('filter.refreshSourcesHelp')}</small>
-                    <div className="source-options">
-                        {sourceMeta.map((source) => (
-                            <label className="source-option" key={source.key}>
-                                <input
-                                    type="checkbox"
-                                    checked={refreshSources.includes(source.key)}
-                                    disabled={isRefreshing}
-                                    onChange={() => toggleRefreshSource(source.key)}
-                                />
-                                <span className="source-title">{source.label}</span>
-                                <small className="source-desc">{source.desc}</small>
-                            </label>
-                        ))}
+                        <fieldset className="refresh-sources-panel" aria-describedby="filters-hint">
+                            <span>{t('filter.refreshSources')}</span>
+                            <small className="field-help">{t('filter.refreshSourcesHelp')}</small>
+                            <div className="source-options">
+                                {sourceMeta.map((source) => (
+                                    <label className="source-option" key={source.key}>
+                                        <input
+                                            type="checkbox"
+                                            checked={refreshSources.includes(source.key)}
+                                            disabled={isRefreshing}
+                                            onChange={() => toggleRefreshSource(source.key)}
+                                        />
+                                        <span className="source-title">{source.label}</span>
+                                        <small className="source-desc">{source.desc}</small>
+                                    </label>
+                                ))}
+                            </div>
+                        </fieldset>
+
+                        <div className="actions compact">
+                            <button
+                                type="button"
+                                disabled={isRefreshing || refreshSources.length === 0}
+                                onClick={() =>
+                                    onRefresh({
+                                        all_months: false,
+                                        months: defaultRefreshMonths,
+                                        from_month: refreshFromMonth || null,
+                                        sources: refreshSources
+                                    })
+                                }
+                            >
+                                {isRefreshing ? t('filter.refreshing') : t('filter.refresh')}
+                            </button>
+                            <button type="button" className="ghost" disabled={isRefreshing} onClick={onReset}>{t('filter.reset')}</button>
+                        </div>
                     </div>
-                </fieldset>
 
-                <div className="actions compact">
-                    <button
-                        type="button"
-                        disabled={isRefreshing || refreshSources.length === 0}
-                        onClick={() =>
-                            onRefresh({
-                                all_months: false,
-                                months: defaultRefreshMonths,
-                                from_month: refreshFromMonth || null,
-                                sources: refreshSources
-                            })
-                        }
-                    >
-                        {isRefreshing ? t('filter.refreshing') : t('filter.refresh')}
-                    </button>
-                    <button type="button" className="ghost" disabled={isRefreshing} onClick={onReset}>{t('filter.reset')}</button>
+                    {refreshFeedback ? (
+                        <div className={`refresh-feedback ${refreshFeedback.kind}`} role="status" aria-live="polite">
+                            {refreshFeedback.message}
+                        </div>
+                    ) : null}
+                </>
+            ) : (
+                <div className="actions compact filter-only-actions">
+                    <button type="button" className="ghost" onClick={onReset}>{t('filter.reset')}</button>
                 </div>
-            </div>
-
-            {refreshFeedback ? (
-                <div className={`refresh-feedback ${refreshFeedback.kind}`} role="status" aria-live="polite">
-                    {refreshFeedback.message}
-                </div>
-            ) : null}
+            )}
 
             <div className="chip-row" aria-live="polite">
                 {chips.length === 0 ? <span className="chip empty" role="status">{t('filter.noChips')}</span> : null}

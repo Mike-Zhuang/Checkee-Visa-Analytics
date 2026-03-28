@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import secrets
 from datetime import datetime
 from io import StringIO
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
-from app.core.config import API_DEFAULT_CASES_LIMIT, API_MAX_CASES_LIMIT
+from app.core.config import (
+    ADMIN_REFRESH_KEY,
+    API_DEFAULT_CASES_LIMIT,
+    API_MAX_CASES_LIMIT,
+    REFRESH_REQUIRE_ADMIN_KEY,
+)
 from app.core.schemas import (
     AnomalyRow,
     CohortStatsRow,
@@ -19,6 +25,7 @@ from app.core.schemas import (
     RefreshResponse,
 )
 from app.services.data_service import service
+from app.services.data_service import RefreshRateLimitError
 from app.services.scraper import list_supported_sources
 
 router = APIRouter(prefix="/api/v1", tags=["checkee"])
@@ -55,6 +62,31 @@ def _filtered_rows(
     )
 
 
+def _require_admin_refresh_key(request: Request) -> None:
+    if not REFRESH_REQUIRE_ADMIN_KEY:
+        return
+
+    key = ADMIN_REFRESH_KEY.strip()
+    if not key:
+        service.record_refresh_event(
+            status="error",
+            message="admin refresh key is not configured",
+            triggered_by="manual",
+        )
+        raise HTTPException(status_code=503, detail="admin refresh key is not configured")
+
+    provided = request.headers.get("X-Admin-Key", "")
+    if not secrets.compare_digest(provided, key):
+        remote_addr = request.client.host if request.client else "unknown"
+        service.record_refresh_event(
+            status="denied",
+            message="admin refresh key invalid",
+            triggered_by="manual",
+            details={"remote_addr": remote_addr},
+        )
+        raise HTTPException(status_code=403, detail="admin refresh key invalid")
+
+
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     has_data = len(service.get_cases()) > 0
@@ -62,7 +94,9 @@ def health() -> HealthResponse:
 
 
 @router.post("/tasks/refresh", response_model=RefreshResponse)
-def refresh(req: RefreshRequest) -> RefreshResponse:
+def refresh(req: RefreshRequest, request: Request) -> RefreshResponse:
+    _require_admin_refresh_key(request)
+
     try:
         result = service.refresh(
             all_months=req.all_months,
@@ -71,9 +105,31 @@ def refresh(req: RefreshRequest) -> RefreshResponse:
             sources=req.sources,
         )
         return RefreshResponse(**result)
+    except RefreshRateLimitError as exc:
+        service.record_refresh_event(
+            status="blocked",
+            message=f"refresh cooldown in effect, retry in {exc.retry_after_seconds}s",
+            triggered_by="manual",
+            details={"retry_after_seconds": exc.retry_after_seconds},
+        )
+        raise HTTPException(
+            status_code=429,
+            detail=f"refresh cooldown in effect, retry in {exc.retry_after_seconds}s",
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        ) from exc
     except ValueError as exc:
+        service.record_refresh_event(
+            status="error",
+            message=str(exc),
+            triggered_by="manual",
+        )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
+        service.record_refresh_event(
+            status="error",
+            message=str(exc),
+            triggered_by="manual",
+        )
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 

@@ -12,6 +12,13 @@ function getBooleanEnv(key: string, fallback: boolean): boolean {
     return ['1', 'true', 'yes', 'on'].includes(raw.trim().toLowerCase())
 }
 
+function getStringEnv(key: string, fallback: string): string {
+    const raw = import.meta.env[key] as string | undefined
+    if (!raw) return fallback
+    const value = raw.trim()
+    return value || fallback
+}
+
 function getNumberArrayEnv(key: string, fallback: number[]): number[] {
     const raw = import.meta.env[key] as string | undefined
     if (!raw) return fallback
@@ -33,5 +40,10 @@ export const frontendConfig = {
     pageSizeOptions: getNumberArrayEnv('VITE_PAGE_SIZE_OPTIONS', [50, 100, 200]),
     enableLanguageSwitch: getBooleanEnv('VITE_ENABLE_LANGUAGE_SWITCH', true),
     enableSensitivity: getBooleanEnv('VITE_ENABLE_SENSITIVITY', true),
-    enableConsulateGroups: getBooleanEnv('VITE_ENABLE_CONSULATE_GROUPS', true)
+    enableConsulateGroups: getBooleanEnv('VITE_ENABLE_CONSULATE_GROUPS', true),
+    enablePublicRefresh: getBooleanEnv('VITE_ENABLE_PUBLIC_REFRESH', false),
+    enableAdminPage: getBooleanEnv('VITE_ENABLE_ADMIN_PAGE', true),
+    adminRoutePath: getStringEnv('VITE_ADMIN_ROUTE_PATH', '/admin-ops'),
+    adminRequireAccessCode: getBooleanEnv('VITE_ADMIN_REQUIRE_ACCESS_CODE', false),
+    adminAccessCode: getStringEnv('VITE_ADMIN_ACCESS_CODE', '')
 }

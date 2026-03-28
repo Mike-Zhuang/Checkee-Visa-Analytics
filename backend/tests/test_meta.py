@@ -17,6 +17,8 @@ def test_meta_options_and_state(client, seed_cases) -> None:
     assert state_payload["has_data"] is True
     assert state_payload["current_case_count"] == 4
     assert state_payload["fetched_month_range"]["latest"] == "2026-03"
+    assert "refresh_min_interval_seconds" in state_payload
+    assert "refresh_available_in_seconds" in state_payload
 
 
 def test_meta_consulate_groups(client, seed_cases) -> None:

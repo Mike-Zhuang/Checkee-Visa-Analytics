@@ -44,15 +44,45 @@ export async function getOptions(): Promise<OptionsResponse> {
     return fetchJson<OptionsResponse>('/meta/options')
 }
 
-export async function refreshData(payload: RefreshPayload = { all_months: false, months: 6 }): Promise<void> {
+async function parseErrorDetail(response: Response): Promise<string> {
+    try {
+        const payload = await response.json() as { detail?: string }
+        if (payload.detail) {
+            return payload.detail
+        }
+    } catch {
+        return ''
+    }
+    return ''
+}
+
+async function refreshDataInternal(payload: RefreshPayload, adminKey?: string): Promise<void> {
+    const headers: HeadersInit = { 'Content-Type': 'application/json' }
+    const normalizedAdminKey = adminKey?.trim()
+    if (normalizedAdminKey) {
+        headers['X-Admin-Key'] = normalizedAdminKey
+    }
+
     const res = await fetch(`${API_BASE}/tasks/refresh`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload)
     })
     if (!res.ok) {
-        throw new Error(`refresh failed: ${res.status}`)
+        const detail = await parseErrorDetail(res)
+        throw new Error(`refresh failed: ${res.status}${detail ? ` ${detail}` : ''}`)
     }
+}
+
+export async function refreshData(payload: RefreshPayload = { all_months: false, months: 6 }): Promise<void> {
+    return refreshDataInternal(payload)
+}
+
+export async function refreshDataAsAdmin(
+    payload: RefreshPayload = { all_months: false, months: 6 },
+    adminKey: string
+): Promise<void> {
+    return refreshDataInternal(payload, adminKey)
 }
 
 export async function getMetaState(): Promise<MetaState> {

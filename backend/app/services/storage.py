@@ -62,10 +62,11 @@ def load_report() -> str:
     return REPORT_MD.read_text(encoding="utf-8")
 
 
-def save_meta(data: dict[str, Any]) -> None:
+def save_meta(data: dict[str, Any], *, update_timestamp: bool = True) -> None:
     ensure_data_dir()
     payload = dict(data)
-    payload["updated_at"] = datetime.now().isoformat(timespec="seconds")
+    if update_timestamp:
+        payload["updated_at"] = datetime.now().isoformat(timespec="seconds")
     META_JSON.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 

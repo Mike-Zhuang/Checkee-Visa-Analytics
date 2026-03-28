@@ -5,7 +5,7 @@ from datetime import datetime
 from threading import RLock
 from typing import Any
 
-from app.core.config import MAX_FETCH_MONTHS
+from app.core.config import MAX_FETCH_MONTHS, REFRESH_MIN_INTERVAL_SECONDS
 from app.services import analytics
 from app.services.scraper import CaseRow, FetchResult, fetch_cases, list_supported_sources
 from app.services.storage import (
@@ -20,9 +20,52 @@ from app.services.storage import (
 )
 
 
+class RefreshRateLimitError(ValueError):
+    def __init__(self, retry_after_seconds: int) -> None:
+        super().__init__("refresh cooldown not reached")
+        self.retry_after_seconds = max(1, retry_after_seconds)
+
+
 class DataService:
     def __init__(self) -> None:
         self._lock = RLock()
+
+    @staticmethod
+    def _append_refresh_history(
+        history: list[dict[str, Any]] | None,
+        entry: dict[str, Any],
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        normalized = [dict(item) for item in (history or []) if isinstance(item, dict)]
+        normalized.insert(0, entry)
+        return normalized[:limit]
+
+    def record_refresh_event(
+        self,
+        *,
+        status: str,
+        message: str,
+        triggered_by: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        with self._lock:
+            meta = load_meta()
+            entry: dict[str, Any] = {
+                "occurred_at": datetime.now().isoformat(timespec="seconds"),
+                "status": status,
+                "message": message,
+                "triggered_by": triggered_by,
+            }
+            if details:
+                entry["details"] = details
+
+            history = self._append_refresh_history(meta.get("refresh_history"), entry)
+            payload = {
+                **meta,
+                "last_refresh_result": entry,
+                "refresh_history": history,
+            }
+            save_meta(payload, update_timestamp=False)
 
     def refresh(
         self,
@@ -32,6 +75,7 @@ class DataService:
         sources: list[str] | None = None,
     ) -> dict[str, Any]:
         with self._lock:
+            self._enforce_refresh_interval()
             fetch_result: FetchResult = fetch_cases(
                 all_months=all_months,
                 months=months,
@@ -48,6 +92,19 @@ class DataService:
 
             report = analytics.markdown_report(payload)
             save_report(report)
+
+            previous_meta = load_meta()
+            success_entry = {
+                "occurred_at": datetime.now().isoformat(timespec="seconds"),
+                "status": "success",
+                "message": "refresh completed",
+                "triggered_by": "manual",
+                "details": {
+                    "total_cases": len(payload),
+                    "fetched_month_count": len(fetch_result.fetched_months),
+                    "selected_sources": fetch_result.selected_sources,
+                },
+            }
 
             save_meta(
                 {
@@ -66,6 +123,11 @@ class DataService:
                     "source_discovery_count": len(fetch_result.source_discovery),
                     "coverage": fetch_result.coverage,
                     "data_quality": data_quality,
+                    "last_refresh_result": success_entry,
+                    "refresh_history": self._append_refresh_history(
+                        previous_meta.get("refresh_history"),
+                        success_entry,
+                    ),
                 }
             )
 
@@ -79,6 +141,24 @@ class DataService:
                 "month_limit": MAX_FETCH_MONTHS,
                 "generated_at": datetime.now(),
             }
+
+    def _enforce_refresh_interval(self) -> None:
+        if REFRESH_MIN_INTERVAL_SECONDS <= 0:
+            return
+
+        meta = load_meta()
+        updated_at_raw = meta.get("updated_at")
+        if not updated_at_raw:
+            return
+
+        try:
+            updated_dt = datetime.fromisoformat(str(updated_at_raw))
+        except ValueError:
+            return
+
+        elapsed_seconds = max(0, int((datetime.now() - updated_dt).total_seconds()))
+        if elapsed_seconds < REFRESH_MIN_INTERVAL_SECONDS:
+            raise RefreshRateLimitError(REFRESH_MIN_INTERVAL_SECONDS - elapsed_seconds)
 
     @staticmethod
     def _is_valid_date(value: str) -> bool:
@@ -207,12 +287,15 @@ class DataService:
 
         updated_at_raw = meta.get("updated_at")
         freshness_seconds: int | None = None
+        refresh_available_in_seconds = 0
         if updated_at_raw:
             try:
                 updated_dt = datetime.fromisoformat(str(updated_at_raw))
                 freshness_seconds = max(0, int((now - updated_dt).total_seconds()))
+                refresh_available_in_seconds = max(0, REFRESH_MIN_INTERVAL_SECONDS - freshness_seconds)
             except ValueError:
                 freshness_seconds = None
+                refresh_available_in_seconds = 0
 
         fetched_months = meta.get("fetched_months") or []
         return {
@@ -220,6 +303,8 @@ class DataService:
             "has_data": len(rows) > 0,
             "current_case_count": len(rows),
             "data_freshness_seconds": freshness_seconds,
+            "refresh_min_interval_seconds": REFRESH_MIN_INTERVAL_SECONDS,
+            "refresh_available_in_seconds": refresh_available_in_seconds,
             "fetched_month_range": {
                 "latest": fetched_months[0] if fetched_months else None,
                 "earliest": fetched_months[-1] if fetched_months else None,

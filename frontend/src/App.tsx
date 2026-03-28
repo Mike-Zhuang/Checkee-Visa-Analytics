@@ -389,6 +389,9 @@ export default function App() {
                 <div className="meta-core">
                     <strong>{t('app.sampleCount', { count: metaState?.current_case_count ?? 0 })}</strong>
                     <span>{freshnessHint}</span>
+                    {!frontendConfig.enablePublicRefresh ? (
+                        <span className="public-refresh-off">{t('app.publicRefreshDisabled')}</span>
+                    ) : null}
                 </div>
                 <details className="meta-more">
                     <summary>{t('app.moreInfo')}</summary>
@@ -416,7 +419,7 @@ export default function App() {
             <section className="starter-guide" role="note" aria-label={t('guide.title')}>
                 <h3>{t('guide.title')}</h3>
                 <ol>
-                    <li>{t('guide.step1')}</li>
+                    <li>{frontendConfig.enablePublicRefresh ? t('guide.step1') : t('guide.step1Readonly')}</li>
                     <li>{t('guide.step2')}</li>
                     <li>{t('guide.step3')}</li>
                 </ol>
@@ -450,6 +453,7 @@ export default function App() {
                 availableRefreshSources={options.fetch_sources}
                 defaultRefreshMonths={frontendConfig.defaultRefreshMonths}
                 showConsulateGroups={frontendConfig.enableConsulateGroups}
+                showRefreshControls={frontendConfig.enablePublicRefresh}
                 isRefreshing={isRefreshing}
                 refreshFeedback={refreshFeedback}
                 onRefreshFromMonthChange={setRefreshFromMonth}
