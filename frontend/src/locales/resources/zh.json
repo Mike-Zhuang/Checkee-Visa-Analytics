@@ -144,6 +144,12 @@
         "step2": "第二步：在筛选区选择你关心的签证类型、状态和月份。",
         "step3": "第三步：优先看“趋势与成熟度”和上方核心指标，再看详细分析。"
     },
+    "footer": {
+        "version": "版本 {{version}}",
+        "githubRepo": "GitHub 仓库",
+        "maintainedBy": "维护者：{{name}}",
+        "buyMeCoffee": "Buy Me a Coffee"
+    },
     "admin": {
         "title": "管理员刷新控制台",
         "subtitle": "用于定时运营之外的手动刷新",

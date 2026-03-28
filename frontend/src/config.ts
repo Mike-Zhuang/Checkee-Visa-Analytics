@@ -45,5 +45,10 @@ export const frontendConfig = {
     enableAdminPage: getBooleanEnv('VITE_ENABLE_ADMIN_PAGE', true),
     adminRoutePath: getStringEnv('VITE_ADMIN_ROUTE_PATH', '/admin-ops'),
     adminRequireAccessCode: getBooleanEnv('VITE_ADMIN_REQUIRE_ACCESS_CODE', false),
-    adminAccessCode: getStringEnv('VITE_ADMIN_ACCESS_CODE', '')
+    adminAccessCode: getStringEnv('VITE_ADMIN_ACCESS_CODE', ''),
+    appVersion: getStringEnv('VITE_APP_VERSION', __APP_VERSION__),
+    githubRepoUrl: getStringEnv('VITE_GITHUB_REPO_URL', 'https://github.com/Mike-Zhuang/Checkee-Visa-Analytics'),
+    maintainerName: getStringEnv('VITE_MAINTAINER_NAME', 'Zhuang Chengbo'),
+    maintainerUrl: getStringEnv('VITE_MAINTAINER_URL', 'https://github.com/Mike-Zhuang'),
+    buyMeCoffeeUrl: getStringEnv('VITE_BUY_ME_COFFEE_URL', 'https://www.buymeacoffee.com/mikezhuang')
 }

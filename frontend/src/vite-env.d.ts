@@ -13,8 +13,15 @@ interface ImportMetaEnv {
     readonly VITE_ADMIN_ROUTE_PATH?: string
     readonly VITE_ADMIN_REQUIRE_ACCESS_CODE?: string
     readonly VITE_ADMIN_ACCESS_CODE?: string
+    readonly VITE_APP_VERSION?: string
+    readonly VITE_GITHUB_REPO_URL?: string
+    readonly VITE_MAINTAINER_NAME?: string
+    readonly VITE_MAINTAINER_URL?: string
+    readonly VITE_BUY_ME_COFFEE_URL?: string
 }
 
 interface ImportMeta {
     readonly env: ImportMetaEnv
 }
+
+declare const __APP_VERSION__: string

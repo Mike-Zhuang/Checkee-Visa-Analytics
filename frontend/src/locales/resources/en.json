@@ -144,6 +144,12 @@
         "step2": "Step 2: use filters to focus on visa type, status and month.",
         "step3": "Step 3: read Trend & Maturity and top metrics first, then dive into detailed modules."
     },
+    "footer": {
+        "version": "Version {{version}}",
+        "githubRepo": "GitHub Repository",
+        "maintainedBy": "Maintained by {{name}}",
+        "buyMeCoffee": "Buy Me a Coffee"
+    },
     "admin": {
         "title": "Admin Refresh Console",
         "subtitle": "Manual refresh entry for scheduled operations",

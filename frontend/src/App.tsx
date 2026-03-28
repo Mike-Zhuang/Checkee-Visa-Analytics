@@ -371,6 +371,9 @@ export default function App() {
 
     const languageValue = i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'zh'
     const errorList = Object.values(errors)
+    const appVersionLabel = frontendConfig.appVersion.startsWith('v')
+        ? frontendConfig.appVersion
+        : `v${frontendConfig.appVersion}`
 
     return (
         <main className={`app-shell glass-tier-${glassTier}`}>
@@ -498,6 +501,26 @@ export default function App() {
                     setPageSize(size)
                 }}
             />
+
+            <footer className="open-source-footer">
+                <span>{t('footer.version', { version: appVersionLabel })}</span>
+                <a href={frontendConfig.githubRepoUrl} target="_blank" rel="noreferrer">
+                    {t('footer.githubRepo')}
+                </a>
+                <a href={frontendConfig.maintainerUrl} target="_blank" rel="noreferrer">
+                    {t('footer.maintainedBy', { name: frontendConfig.maintainerName })}
+                </a>
+                {frontendConfig.buyMeCoffeeUrl ? (
+                    <a
+                        className="coffee-link"
+                        href={frontendConfig.buyMeCoffeeUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                    >
+                        {t('footer.buyMeCoffee')}
+                    </a>
+                ) : null}
+            </footer>
         </main>
     )
 }

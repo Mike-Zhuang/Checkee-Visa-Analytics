@@ -1,8 +1,17 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
+declare const process: {
+    env: Record<string, string | undefined>
+}
+
+const appVersion = process.env.npm_package_version ?? '0.0.0'
+
 export default defineConfig({
     plugins: [react()],
+    define: {
+        __APP_VERSION__: JSON.stringify(appVersion)
+    },
     server: {
         host: '127.0.0.1',
         port: 5173

@@ -66,7 +66,7 @@ REPORT_MD = DATA_DIR / "live_report_all_visa.md"
 META_JSON = DATA_DIR / "meta.json"
 
 APP_NAME = _env_str("CHECKEE_APP_NAME", "Checkee Analytics API")
-APP_VERSION = _env_str("CHECKEE_APP_VERSION", "0.5.0")
+APP_VERSION = _env_str("CHECKEE_APP_VERSION", "0.5.1")
 
 CHECKEE_BASE_URL = _env_str("CHECKEE_BASE_URL", "https://checkee.info/")
 REQUEST_TIMEOUT_SECONDS = _env_int("CHECKEE_REQUEST_TIMEOUT_SECONDS", 25, minimum=1)
