@@ -11,6 +11,10 @@ const EMPTY_OPTIONS: OptionsResponse = {
     consulates: [],
     statuses: [],
     entries: [],
+    majors: [],
+    employers: [],
+    detail_cities: [],
+    detail_states: [],
     fetch_sources: []
 }
 

@@ -165,11 +165,28 @@ export default function FilterBar({
         ...filters.months.map((v) => ({ field: 'months' as const, value: v, label: t('filter.chipMonth', { value: v }) })),
         ...filters.consulates.map((v) => ({ field: 'consulates' as const, value: v, label: t('filter.chipConsulate', { value: v }) })),
         ...filters.statuses.map((v) => ({ field: 'statuses' as const, value: v, label: t('filter.chipStatus', { value: v }) })),
-        ...filters.entries.map((v) => ({ field: 'entries' as const, value: v, label: t('filter.chipEntry', { value: v }) }))
+        ...filters.entries.map((v) => ({ field: 'entries' as const, value: v, label: t('filter.chipEntry', { value: v }) })),
+        ...filters.majors.map((v) => ({ field: 'majors' as const, value: v, label: t('filter.chipMajor', { value: v }) })),
+        ...filters.employers.map((v) => ({ field: 'employers' as const, value: v, label: t('filter.chipEmployer', { value: v }) })),
+        ...filters.detail_cities.map((v) => ({ field: 'detail_cities' as const, value: v, label: t('filter.chipDetailCity', { value: v }) })),
+        ...filters.detail_states.map((v) => ({ field: 'detail_states' as const, value: v, label: t('filter.chipDetailState', { value: v }) })),
+        ...(filters.search_text
+            ? [{ field: 'search_text' as const, value: filters.search_text, label: t('filter.chipSearch', { value: filters.search_text }) }]
+            : [])
     ]
 
     const removeChip = (field: keyof Filters, value: string) => {
-        onChange({ ...filters, [field]: filters[field].filter((x) => x !== value) })
+        if (field === 'search_text') {
+            onChange({ ...filters, search_text: '' })
+            return
+        }
+
+        const current = filters[field]
+        if (!Array.isArray(current)) {
+            return
+        }
+
+        onChange({ ...filters, [field]: current.filter((x) => x !== value) })
     }
 
     const applyRecentMonths = (count: number) => {
@@ -202,15 +219,17 @@ export default function FilterBar({
 
     return (
         <section className="filter-card" role="region" aria-labelledby="filters-title">
-            <h3 id="filters-title">{titleText}</h3>
-            <div className="hint-list" id="filters-hint">
-                <p>{t('filter.hintSelect')}</p>
-                <p>{t('filter.hintEmptyMeansAll')}</p>
-                {showRefreshControls ? <p>{t('filter.hintHistory')}</p> : null}
+            <div className="filter-top">
+                <h3 id="filters-title">{titleText}</h3>
+                <div className="hint-list" id="filters-hint">
+                    <p>{t('filter.hintSelect')}</p>
+                    <p>{t('filter.hintEmptyMeansAll')}</p>
+                    {showRefreshControls ? <p>{t('filter.hintHistory')}</p> : null}
+                </div>
             </div>
 
             {showRefreshControls ? (
-                <>
+                <div className="refresh-shell">
                     <div className="refresh-row">
                         <label className="field field-inline" htmlFor="refresh-from-month">
                             <span>{t('filter.refreshFromMonth')}</span>
@@ -246,7 +265,7 @@ export default function FilterBar({
                             </div>
                         </fieldset>
 
-                        <div className="actions compact">
+                        <div className="actions compact refresh-actions">
                             <button
                                 type="button"
                                 disabled={isRefreshing || refreshSources.length === 0}
@@ -270,12 +289,27 @@ export default function FilterBar({
                             {refreshFeedback.message}
                         </div>
                     ) : null}
-                </>
+                </div>
             ) : (
                 <div className="actions compact filter-only-actions">
                     <button type="button" className="ghost" onClick={onReset}>{t('filter.reset')}</button>
                 </div>
             )}
+
+            <div className="filter-search-card">
+                <label className="field" htmlFor="filter-search-text">
+                    <span id="filter-search-text-label">{t('filter.searchText')}</span>
+                    <input
+                        id="filter-search-text"
+                        type="text"
+                        value={filters.search_text}
+                        placeholder={t('filter.searchTextPlaceholder')}
+                        aria-labelledby="filter-search-text-label"
+                        onChange={(e) => onChange({ ...filters, search_text: e.currentTarget.value })}
+                    />
+                    <small className="field-help">{t('filter.searchTextHint')}</small>
+                </label>
+            </div>
 
             <div className="chip-row" aria-live="polite">
                 {chips.length === 0 ? <span className="chip empty" role="status">{t('filter.noChips')}</span> : null}
@@ -293,70 +327,119 @@ export default function FilterBar({
                 ))}
             </div>
 
-            <div className="filter-grid">
-                {!showConsulateGroups ? (
-                    <CheckboxGroup
-                        title={t('filter.visaTypes')}
-                        hint={t('filter.visaTypesHint')}
-                        values={options.visa_types}
-                        selected={filters.visa_types}
-                        onPick={(v) => onChange({ ...filters, visa_types: v })}
-                        onClear={() => onChange({ ...filters, visa_types: [] })}
-                        clearText={t('filter.clearOne')}
-                    />
-                ) : null}
-                <label className="field" htmlFor="filter-months">
-                    <span id="filter-months-label">{t('filter.months')}</span>
-                    <select
-                        id="filter-months"
-                        multiple
-                        value={filters.months}
-                        aria-labelledby="filter-months-label"
-                        onChange={(e) => {
-                            const next = Array.from(e.currentTarget.selectedOptions).map((o) => o.value)
-                            onChange({ ...filters, months: next })
-                        }}
-                    >
-                        {options.months.map((v) => (
-                            <option key={v} value={v}>{v}</option>
-                        ))}
-                    </select>
-                    <div className="quick-actions">
-                        <button type="button" className="ghost" onClick={() => applyRecentMonths(3)}>{t('filter.quick3')}</button>
-                        <button type="button" className="ghost" onClick={() => applyRecentMonths(6)}>{t('filter.quick6')}</button>
-                        <button type="button" className="ghost" onClick={() => applyRecentMonths(12)}>{t('filter.quick12')}</button>
+            <div className="filter-zones">
+                <section className="filter-zone" aria-label={t('filter.coreFiltersTitle')}>
+                    <div className="filter-zone-head">
+                        <h4>{t('filter.coreFiltersTitle')}</h4>
+                        <p>{t('filter.coreFiltersHint')}</p>
                     </div>
-                    <small className="field-help">{t('filter.monthsHint')}</small>
-                </label>
-                <CheckboxGroup
-                    title={t('filter.statuses')}
-                    hint={t('filter.statusesHint')}
-                    values={options.statuses}
-                    selected={filters.statuses}
-                    onPick={(v) => onChange({ ...filters, statuses: v })}
-                    onClear={() => onChange({ ...filters, statuses: [] })}
-                    clearText={t('filter.clearOne')}
-                />
-                <CheckboxGroup
-                    title={t('filter.entries')}
-                    hint={t('filter.entriesHint')}
-                    values={options.entries}
-                    selected={filters.entries}
-                    onPick={(v) => onChange({ ...filters, entries: v })}
-                    onClear={() => onChange({ ...filters, entries: [] })}
-                    clearText={t('filter.clearOne')}
-                />
-                {!showConsulateGroups ? (
-                    <CheckboxGroup
-                        title={t('filter.consulates')}
-                        hint={t('filter.consulatesHint')}
-                        values={options.consulates}
-                        selected={filters.consulates}
-                        onPick={(v) => onChange({ ...filters, consulates: v })}
-                        onClear={() => onChange({ ...filters, consulates: [] })}
-                        clearText={t('filter.clearOne')}
-                    />
-                ) : null}
+                    <div className="filter-grid filter-grid-core">
+                        {!showConsulateGroups ? (
+                            <CheckboxGroup
+                                title={t('filter.visaTypes')}
+                                hint={t('filter.visaTypesHint')}
+                                values={options.visa_types}
+                                selected={filters.visa_types}
+                                onPick={(v) => onChange({ ...filters, visa_types: v })}
+                                onClear={() => onChange({ ...filters, visa_types: [] })}
+                                clearText={t('filter.clearOne')}
+                            />
+                        ) : null}
+                        <label className="field" htmlFor="filter-months">
+                            <span id="filter-months-label">{t('filter.months')}</span>
+                            <select
+                                id="filter-months"
+                                multiple
+                                value={filters.months}
+                                aria-labelledby="filter-months-label"
+                                onChange={(e) => {
+                                    const next = Array.from(e.currentTarget.selectedOptions).map((o) => o.value)
+                                    onChange({ ...filters, months: next })
+                                }}
+                            >
+                                {options.months.map((v) => (
+                                    <option key={v} value={v}>{v}</option>
+                                ))}
+                            </select>
+                            <div className="quick-actions">
+                                <button type="button" className="ghost" onClick={() => applyRecentMonths(3)}>{t('filter.quick3')}</button>
+                                <button type="button" className="ghost" onClick={() => applyRecentMonths(6)}>{t('filter.quick6')}</button>
+                                <button type="button" className="ghost" onClick={() => applyRecentMonths(12)}>{t('filter.quick12')}</button>
+                            </div>
+                            <small className="field-help">{t('filter.monthsHint')}</small>
+                        </label>
+                        <CheckboxGroup
+                            title={t('filter.statuses')}
+                            hint={t('filter.statusesHint')}
+                            values={options.statuses}
+                            selected={filters.statuses}
+                            onPick={(v) => onChange({ ...filters, statuses: v })}
+                            onClear={() => onChange({ ...filters, statuses: [] })}
+                            clearText={t('filter.clearOne')}
+                        />
+                        <CheckboxGroup
+                            title={t('filter.entries')}
+                            hint={t('filter.entriesHint')}
+                            values={options.entries}
+                            selected={filters.entries}
+                            onPick={(v) => onChange({ ...filters, entries: v })}
+                            onClear={() => onChange({ ...filters, entries: [] })}
+                            clearText={t('filter.clearOne')}
+                        />
+                        {!showConsulateGroups ? (
+                            <CheckboxGroup
+                                title={t('filter.consulates')}
+                                hint={t('filter.consulatesHint')}
+                                values={options.consulates}
+                                selected={filters.consulates}
+                                onPick={(v) => onChange({ ...filters, consulates: v })}
+                                onClear={() => onChange({ ...filters, consulates: [] })}
+                                clearText={t('filter.clearOne')}
+                            />
+                        ) : null}
+                    </div>
+                </section>
+
+                <section className="filter-zone" aria-label={t('filter.detailFiltersTitle')}>
+                    <div className="filter-zone-head">
+                        <h4>{t('filter.detailFiltersTitle')}</h4>
+                        <p>{t('filter.detailFiltersHint')}</p>
+                    </div>
+                    <div className="filter-grid filter-grid-detail">
+                        <MultiSelect
+                            id="filter-majors"
+                            label={t('filter.majors')}
+                            hint={t('filter.majorsHint')}
+                            values={options.majors}
+                            selected={filters.majors}
+                            onPick={(v) => onChange({ ...filters, majors: v })}
+                        />
+                        <MultiSelect
+                            id="filter-employers"
+                            label={t('filter.employers')}
+                            hint={t('filter.employersHint')}
+                            values={options.employers}
+                            selected={filters.employers}
+                            onPick={(v) => onChange({ ...filters, employers: v })}
+                        />
+                        <MultiSelect
+                            id="filter-detail-cities"
+                            label={t('filter.detailCities')}
+                            hint={t('filter.detailCitiesHint')}
+                            values={options.detail_cities}
+                            selected={filters.detail_cities}
+                            onPick={(v) => onChange({ ...filters, detail_cities: v })}
+                        />
+                        <MultiSelect
+                            id="filter-detail-states"
+                            label={t('filter.detailStates')}
+                            hint={t('filter.detailStatesHint')}
+                            values={options.detail_states}
+                            selected={filters.detail_states}
+                            onPick={(v) => onChange({ ...filters, detail_states: v })}
+                        />
+                    </div>
+                </section>
             </div>
 
             {showConsulateGroups ? (

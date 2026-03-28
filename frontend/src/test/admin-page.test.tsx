@@ -33,6 +33,10 @@ describe('AdminPage', () => {
             consulates: ['BeiJing'],
             statuses: ['Pending'],
             entries: ['I20'],
+            majors: ['CS'],
+            employers: ['Google'],
+            detail_cities: ['Beijing'],
+            detail_states: ['Beijing'],
             fetch_sources: ['monthly_track']
         })
 

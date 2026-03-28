@@ -11,6 +11,23 @@ def test_cases_pagination(client, seed_cases) -> None:
     assert len(payload["items"]) == 2
 
 
+def test_cases_detail_filters_and_text_search(client, seed_cases) -> None:
+    response = client.get(
+        "/api/v1/cases",
+        params={
+            "majors": "Math",
+            "employers": "Amazon",
+            "detail_cities": "Toronto",
+            "detail_states": "Ontario",
+            "search_text": "amazon cleared",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["case_number"] == "A002"
+
+
 def test_overview_stats(client, seed_cases) -> None:
     response = client.get("/api/v1/stats/overview")
     assert response.status_code == 200

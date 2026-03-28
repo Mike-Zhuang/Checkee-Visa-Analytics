@@ -31,6 +31,10 @@ SAMPLE_CASES: list[dict[str, Any]] = [
         "event": "1",
         "detail_url": "https://example.com/detail/A001",
         "update_url": "https://example.com/update/A001",
+        "detail_employer": "Google",
+        "detail_note": "STEM case with complete timeline",
+        "detail_city": "Beijing",
+        "detail_state": "Beijing",
     },
     {
         "source_month": "2026-03",
@@ -49,6 +53,10 @@ SAMPLE_CASES: list[dict[str, Any]] = [
         "event": "1",
         "detail_url": "https://example.com/detail/A002",
         "update_url": "https://example.com/update/A002",
+        "detail_employer": "Amazon",
+        "detail_note": "Administrative processing then cleared",
+        "detail_city": "Toronto",
+        "detail_state": "Ontario",
     },
     {
         "source_month": "2026-02",
@@ -67,6 +75,10 @@ SAMPLE_CASES: list[dict[str, Any]] = [
         "event": "0",
         "detail_url": "https://example.com/detail/A003",
         "update_url": "https://example.com/update/A003",
+        "detail_employer": "ByteDance",
+        "detail_note": "Pending and waiting for embassy update",
+        "detail_city": "Paris",
+        "detail_state": "Ile-de-France",
     },
     {
         "source_month": "2026-01",
@@ -85,6 +97,10 @@ SAMPLE_CASES: list[dict[str, Any]] = [
         "event": "0",
         "detail_url": "https://example.com/detail/A004",
         "update_url": "https://example.com/update/A004",
+        "detail_employer": "SpaceY",
+        "detail_note": "Long pending case with no reply",
+        "detail_city": "Seattle",
+        "detail_state": "Washington",
     },
 ]
 

@@ -8,6 +8,10 @@ def test_meta_options_and_state(client, seed_cases) -> None:
     assert "F1" in options_payload["visa_types"]
     assert "H1B" in options_payload["visa_types"]
     assert "BeiJing" in options_payload["consulates"]
+    assert "CS" in options_payload["majors"]
+    assert "Google" in options_payload["employers"]
+    assert "Beijing" in options_payload["detail_cities"]
+    assert "Ontario" in options_payload["detail_states"]
     assert "monthly_track" in options_payload["fetch_sources"]
     assert "latest_snapshot" in options_payload["fetch_sources"]
 

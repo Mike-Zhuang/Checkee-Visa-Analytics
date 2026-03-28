@@ -22,7 +22,11 @@ const rows: CaseItem[] = [
         observed_days: '',
         event: '1',
         detail_url: '',
-        update_url: ''
+        update_url: '',
+        detail_employer: 'Google',
+        detail_note: 'STEM case with complete timeline',
+        detail_city: 'Beijing',
+        detail_state: 'Beijing'
     }
 ]
 

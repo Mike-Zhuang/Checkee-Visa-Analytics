@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 import time
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ from bs4 import BeautifulSoup
 
 from app.core.config import (
     CHECKEE_BASE_URL,
+    DETAIL_FETCH_SAMPLE_RATIO,
     FETCH_DELAY_SECONDS,
     MAX_FETCH_MONTHS,
     REQUEST_RETRIES,
@@ -44,6 +46,10 @@ class CaseRow:
     event: int
     detail_url: str
     update_url: str
+    detail_employer: str
+    detail_note: str
+    detail_city: str
+    detail_state: str
 
 
 @dataclass
@@ -282,9 +288,183 @@ def _parse_month_rows(month: str, html: str, observation_date: date) -> list[Cas
                 event=event,
                 detail_url=urljoin(CHECKEE_BASE_URL, detail_href),
                 update_url=urljoin(CHECKEE_BASE_URL, update_href),
+                detail_employer="",
+                detail_note="",
+                detail_city="",
+                detail_state="",
             )
         )
     return parsed
+
+
+def _compact_text(value: str, limit: int = 320) -> str:
+    compact = re.sub(r"\s+", " ", value or "").strip()
+    if len(compact) <= limit:
+        return compact
+    if limit <= 3:
+        return compact[:limit]
+    return compact[: limit - 3].rstrip() + "..."
+
+
+def _normalize_detail_label(label: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", label.lower()).strip()
+
+
+def _extract_detail_pairs(soup: BeautifulSoup) -> dict[str, str]:
+    pairs: dict[str, str] = {}
+
+    def put(label: str, value: str) -> None:
+        key = _normalize_detail_label(label.rstrip(":"))
+        val = _compact_text(value)
+        if not key or not val:
+            return
+        if len(key) > 80:
+            return
+        if key not in pairs:
+            pairs[key] = val
+
+    for tr in soup.find_all("tr"):
+        cells = tr.find_all(["th", "td"])
+        if len(cells) < 2:
+            continue
+        label = cells[0].get_text(" ", strip=True)
+        value = cells[1].get_text(" ", strip=True)
+        put(label, value)
+
+    for dt in soup.find_all("dt"):
+        dd = dt.find_next_sibling("dd")
+        if dd is None:
+            continue
+        put(dt.get_text(" ", strip=True), dd.get_text(" ", strip=True))
+
+    for li in soup.find_all("li"):
+        text = li.get_text(" ", strip=True)
+        if ":" not in text:
+            continue
+        label, value = text.split(":", 1)
+        put(label, value)
+
+    return pairs
+
+
+def _pick_detail_value(pairs: dict[str, str], aliases: tuple[str, ...]) -> str:
+    for alias in aliases:
+        for key, value in pairs.items():
+            if alias in key and value:
+                return value
+    return ""
+
+
+def _extract_detail_fields(html: str) -> dict[str, str]:
+    soup = BeautifulSoup(html, "html.parser")
+    detail_pairs = _extract_detail_pairs(soup)
+
+    employer = _pick_detail_value(
+        detail_pairs,
+        (
+            "employer",
+            "company",
+            "organization",
+            "institution",
+            "work",
+        ),
+    )
+    note = _pick_detail_value(
+        detail_pairs,
+        (
+            "note",
+            "comment",
+            "remark",
+            "description",
+            "summary",
+            "background",
+        ),
+    )
+    city = _pick_detail_value(detail_pairs, ("city", "location city", "current city", "residence city"))
+    state = _pick_detail_value(detail_pairs, ("state", "province", "region"))
+
+    if not note:
+        for node in soup.select("textarea, .note, .comment, #note, #comment"):
+            candidate = _compact_text(node.get_text(" ", strip=True))
+            if candidate:
+                note = candidate
+                break
+
+    return {
+        "detail_employer": employer,
+        "detail_note": note,
+        "detail_city": city,
+        "detail_state": state,
+    }
+
+
+def _should_sample_detail(row: CaseRow, sample_ratio: float) -> bool:
+    if sample_ratio >= 1:
+        return True
+    if sample_ratio <= 0:
+        return False
+
+    token = row.case_number or row.detail_url or f"{row.nickname}|{row.check_date}|{row.consulate}"
+    digest = hashlib.sha1(token.encode("utf-8")).hexdigest()
+    bucket = int(digest[:8], 16) % 10000
+    threshold = int(sample_ratio * 10000)
+    return bucket < threshold
+
+
+def _enrich_detail_fields(rows: list[CaseRow], session: requests.Session, sample_ratio: float) -> dict[str, Any]:
+    ratio = min(1.0, max(0.0, sample_ratio))
+    metrics: dict[str, Any] = {
+        "detail_sample_ratio": round(ratio, 4),
+        "detail_candidate_count": 0,
+        "detail_sampled_count": 0,
+        "detail_skipped_count": 0,
+        "detail_fetch_error_count": 0,
+        "detail_parse_empty_count": 0,
+        "detail_enriched_count": 0,
+        "detail_blocked": False,
+    }
+
+    detail_blocked = False
+
+    for row in rows:
+        if not row.detail_url:
+            continue
+
+        metrics["detail_candidate_count"] += 1
+
+        if detail_blocked:
+            metrics["detail_skipped_count"] += 1
+            continue
+
+        if not _should_sample_detail(row, ratio):
+            metrics["detail_skipped_count"] += 1
+            continue
+
+        metrics["detail_sampled_count"] += 1
+
+        try:
+            detail_html = _fetch_html(session, row.detail_url)
+        except Exception as exc:  # noqa: BLE001
+            metrics["detail_fetch_error_count"] += 1
+            if "403" in str(exc):
+                detail_blocked = True
+            continue
+
+        detail_fields = _extract_detail_fields(detail_html)
+        row.detail_employer = detail_fields["detail_employer"]
+        row.detail_note = detail_fields["detail_note"]
+        row.detail_city = detail_fields["detail_city"]
+        row.detail_state = detail_fields["detail_state"]
+
+        if any(detail_fields.values()):
+            metrics["detail_enriched_count"] += 1
+        else:
+            metrics["detail_parse_empty_count"] += 1
+
+        time.sleep(FETCH_DELAY_SECONDS)
+
+    metrics["detail_blocked"] = detail_blocked
+    return metrics
 
 
 def _dedupe(rows: list[CaseRow]) -> list[CaseRow]:
@@ -364,6 +544,8 @@ def fetch_cases(
         source_case_counts[LATEST_FETCH_SOURCE] = source_case_counts.get(LATEST_FETCH_SOURCE, 0) + len(latest_snapshot_rows)
 
     deduped_rows = _dedupe(rows)
+    detail_coverage = _enrich_detail_fields(deduped_rows, session, DETAIL_FETCH_SAMPLE_RATIO)
+
     coverage = {
         "selected_sources": selected_sources,
         "source_case_counts": source_case_counts,
@@ -376,6 +558,7 @@ def fetch_cases(
         "raw_case_count": len(rows),
         "deduped_case_count": len(deduped_rows),
         "dedup_removed_count": max(0, len(rows) - len(deduped_rows)),
+        **detail_coverage,
     }
 
     return FetchResult(

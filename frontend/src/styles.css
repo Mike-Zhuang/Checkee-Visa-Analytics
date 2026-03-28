@@ -22,7 +22,7 @@
 
 body {
     margin: 0;
-    font-family: 'Avenir Next', 'Segoe UI', sans-serif;
+    font-family: 'SF Pro Display', 'Avenir Next', 'Helvetica Neue', 'Neue Haas Grotesk Text Pro', sans-serif;
     background: radial-gradient(circle at 15% 15%, #e6f1f8 0%, var(--bg) 45%, #eef2f4 100%);
     color: var(--text);
 }
@@ -178,6 +178,7 @@ body {
 
 .app-shell.glass-tier-full .filter-card .field-inline input,
 .app-shell.glass-tier-full .filter-card .field select,
+.app-shell.glass-tier-full .filter-card .field input[type='text'],
 .app-shell.glass-tier-full .filter-card .checkbox-group,
 .app-shell.glass-tier-full .filter-card .refresh-sources-panel {
     background: rgba(255, 255, 255, 0.84);
@@ -230,6 +231,7 @@ body {
 
 .app-shell.glass-tier-lite .filter-card .field-inline input,
 .app-shell.glass-tier-lite .filter-card .field select,
+.app-shell.glass-tier-lite .filter-card .field input[type='text'],
 .app-shell.glass-tier-lite .filter-card .checkbox-group,
 .app-shell.glass-tier-lite .filter-card .refresh-sources-panel {
     background: rgba(255, 255, 255, 0.94);
@@ -418,6 +420,14 @@ body {
     border-radius: 10px;
     padding: 6px;
     background: #fff;
+}
+
+.field input[type='text'] {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px 10px;
+    background: #fff;
+    font-size: 14px;
 }
 
 .field-help {
@@ -635,6 +645,234 @@ body {
     align-items: center;
     gap: 6px;
     font-size: 13px;
+}
+
+.filter-card {
+    border-radius: 22px;
+    padding: 18px;
+    border: 1px solid rgba(168, 193, 214, 0.72);
+    background:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.9) 0%, rgba(247, 252, 255, 0.84) 52%, rgba(242, 248, 253, 0.9) 100%),
+        radial-gradient(circle at 92% -22%, rgba(157, 209, 244, 0.28) 0%, rgba(157, 209, 244, 0) 52%);
+    box-shadow: 0 20px 36px rgba(24, 56, 84, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.filter-top {
+    display: grid;
+    gap: 10px;
+}
+
+.filter-card h3 {
+    font-size: 20px;
+    letter-spacing: 0.01em;
+}
+
+.filter-card .hint-list {
+    margin-top: 0;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+}
+
+.filter-card .hint-list p {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+    padding: 8px 12px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.76);
+    border: 1px solid rgba(185, 206, 224, 0.76);
+    color: #2f4f66;
+    font-size: 12.5px;
+    line-height: 1.35;
+}
+
+.refresh-shell {
+    margin-top: 14px;
+    border-radius: 18px;
+    border: 1px solid rgba(169, 194, 214, 0.7);
+    background: linear-gradient(160deg, rgba(250, 253, 255, 0.96), rgba(244, 250, 255, 0.9));
+    padding: 12px;
+}
+
+.refresh-row {
+    margin-top: 0;
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) minmax(320px, 1.3fr) auto;
+    gap: 12px;
+    align-items: stretch;
+}
+
+.refresh-actions {
+    display: grid;
+    gap: 8px;
+    align-content: end;
+    min-width: 158px;
+}
+
+.refresh-actions button {
+    width: 100%;
+}
+
+.filter-search-card {
+    margin-top: 12px;
+    border-radius: 16px;
+    border: 1px solid rgba(176, 199, 217, 0.72);
+    background: rgba(255, 255, 255, 0.86);
+    padding: 12px;
+}
+
+.filter-zones {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    gap: 12px;
+}
+
+.filter-zone {
+    border-radius: 16px;
+    border: 1px solid rgba(174, 198, 217, 0.72);
+    background: rgba(255, 255, 255, 0.74);
+    padding: 12px;
+}
+
+.filter-zone-head {
+    display: grid;
+    gap: 3px;
+}
+
+.filter-zone-head h4 {
+    margin: 0;
+    font-size: 14px;
+    color: #1d435e;
+}
+
+.filter-zone-head p {
+    margin: 0;
+    font-size: 12px;
+    color: #4b667d;
+}
+
+.filter-zone .filter-grid {
+    margin-top: 10px;
+    gap: 10px;
+}
+
+.filter-grid-core {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.filter-grid-detail {
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.filter-card .field,
+.filter-card .checkbox-group,
+.filter-card .refresh-sources-panel,
+.filter-card .consulate-group,
+.filter-card .consulate-visa-block,
+.filter-card .consulate-country-block {
+    border-radius: 14px;
+    border-color: rgba(176, 199, 218, 0.78);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.filter-card .field {
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.82);
+}
+
+.filter-card .field span {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: #32556f;
+}
+
+.filter-card .field-help {
+    color: #5a7488;
+    font-size: 11.5px;
+}
+
+.filter-card .field select,
+.filter-card .field-inline input,
+.filter-card .field input[type='text'] {
+    border-radius: 11px;
+    border: 1px solid rgba(182, 205, 222, 0.88);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(249, 253, 255, 0.92));
+}
+
+.filter-card .field select {
+    min-height: 120px;
+}
+
+.filter-card .field-inline {
+    min-width: 0;
+}
+
+.filter-card .checkbox-group {
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.78);
+}
+
+.filter-card .checkbox-group-head {
+    margin-bottom: 6px;
+}
+
+.filter-card .checkbox-item {
+    border-radius: 10px;
+    padding: 4px 6px;
+    transition: background 0.2s ease;
+}
+
+.filter-card .checkbox-item:hover {
+    background: rgba(236, 245, 251, 0.8);
+}
+
+.filter-card .refresh-sources-panel {
+    min-width: 0;
+    padding: 10px;
+}
+
+.filter-card .source-options {
+    gap: 8px;
+}
+
+.filter-card .source-option {
+    border-radius: 11px;
+    padding: 6px 8px;
+    border: 1px solid rgba(198, 215, 228, 0.72);
+    background: rgba(255, 255, 255, 0.72);
+}
+
+.filter-card .quick-actions {
+    margin-top: 8px;
+}
+
+.filter-card .quick-actions button {
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
+.chip-row {
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(148, 177, 199, 0.58);
+}
+
+.chip {
+    border: 1px solid rgba(178, 203, 221, 0.9);
+    background: linear-gradient(180deg, #ffffff, #f1f8fc);
+    color: #234a66;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-weight: 500;
+}
+
+.chip.empty {
+    background: rgba(255, 255, 255, 0.8);
+    border-style: dashed;
 }
 
 button {
@@ -977,7 +1215,7 @@ button.mini {
 table {
     width: 100%;
     border-collapse: collapse;
-    min-width: 860px;
+    min-width: 1180px;
 }
 
 caption {
@@ -1038,8 +1276,16 @@ thead {
     }
 
     .refresh-row {
-        flex-direction: column;
-        align-items: stretch;
+        grid-template-columns: 1fr;
+    }
+
+    .refresh-actions {
+        min-width: 0;
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .filter-zones {
+        grid-template-columns: 1fr;
     }
 
     .field-inline,
@@ -1069,7 +1315,7 @@ thead {
     }
 
     table {
-        min-width: 680px;
+        min-width: 960px;
     }
 }
 
@@ -1099,11 +1345,44 @@ thead {
         grid-template-columns: 1fr;
     }
 
+    .filter-card {
+        border-radius: 16px;
+        padding: 12px;
+    }
+
+    .filter-card .hint-list {
+        grid-template-columns: 1fr;
+    }
+
+    .refresh-shell,
+    .filter-zone,
+    .filter-search-card {
+        border-radius: 12px;
+        padding: 10px;
+    }
+
+    .refresh-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .filter-card .quick-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    .chip-row {
+        gap: 6px;
+    }
+
+    .chip {
+        font-size: 11.5px;
+    }
+
     .chart-wrap {
         height: 260px;
     }
 
     table {
-        min-width: 560px;
+        min-width: 760px;
     }
 }

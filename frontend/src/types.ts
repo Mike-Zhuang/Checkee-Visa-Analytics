@@ -4,6 +4,10 @@ export type OptionsResponse = {
     consulates: string[]
     statuses: string[]
     entries: string[]
+    majors: string[]
+    employers: string[]
+    detail_cities: string[]
+    detail_states: string[]
     fetch_sources: string[]
 }
 
@@ -107,6 +111,10 @@ export type CaseItem = {
     event: string
     detail_url: string
     update_url: string
+    detail_employer: string
+    detail_note: string
+    detail_city: string
+    detail_state: string
 }
 
 export type Filters = {
@@ -115,6 +123,11 @@ export type Filters = {
     statuses: string[]
     entries: string[]
     months: string[]
+    majors: string[]
+    employers: string[]
+    detail_cities: string[]
+    detail_states: string[]
+    search_text: string
 }
 
 export type RefreshPayload = {

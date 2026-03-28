@@ -31,6 +31,53 @@ class DataService:
         self._lock = RLock()
 
     @staticmethod
+    def _row_identity(row: dict[str, Any]) -> str:
+        for key in ("case_number", "update_url", "detail_url"):
+            value = str(row.get(key) or "").strip()
+            if value:
+                return f"{key}:{value}"
+        fallback = "|".join(
+            [
+                str(row.get("nickname") or "").strip(),
+                str(row.get("check_date") or "").strip(),
+                str(row.get("consulate") or "").strip(),
+            ]
+        )
+        return f"fallback:{fallback}"
+
+    def _merge_existing_detail_fields(
+        self,
+        rows: list[dict[str, Any]],
+        previous_rows: list[dict[str, str]],
+    ) -> int:
+        if not rows or not previous_rows:
+            return 0
+
+        detail_fields = ("detail_employer", "detail_note", "detail_city", "detail_state")
+        previous_index = {self._row_identity(row): row for row in previous_rows}
+        merged_count = 0
+
+        for row in rows:
+            old = previous_index.get(self._row_identity(row))
+            if old is None:
+                continue
+
+            merged = False
+            for field in detail_fields:
+                current_value = str(row.get(field) or "").strip()
+                if current_value:
+                    continue
+                old_value = str(old.get(field) or "").strip()
+                if old_value:
+                    row[field] = old_value
+                    merged = True
+
+            if merged:
+                merged_count += 1
+
+        return merged_count
+
+    @staticmethod
     def _append_refresh_history(
         history: list[dict[str, Any]] | None,
         entry: dict[str, Any],
@@ -76,6 +123,7 @@ class DataService:
     ) -> dict[str, Any]:
         with self._lock:
             self._enforce_refresh_interval()
+            previous_rows = load_cases()
             fetch_result: FetchResult = fetch_cases(
                 all_months=all_months,
                 months=months,
@@ -84,6 +132,8 @@ class DataService:
             )
             rows = fetch_result.rows
             payload = [asdict(r) if isinstance(r, CaseRow) else r for r in rows]
+            merged_detail_count = self._merge_existing_detail_fields(payload, previous_rows)
+            coverage = {**fetch_result.coverage, "detail_merged_from_history_count": merged_detail_count}
             data_quality = self._compute_data_quality(payload)
 
             save_cases(payload)
@@ -121,7 +171,7 @@ class DataService:
                     "month_limit": MAX_FETCH_MONTHS,
                     "source_discovery": fetch_result.source_discovery,
                     "source_discovery_count": len(fetch_result.source_discovery),
-                    "coverage": fetch_result.coverage,
+                    "coverage": coverage,
                     "data_quality": data_quality,
                     "last_refresh_result": success_entry,
                     "refresh_history": self._append_refresh_history(
@@ -266,6 +316,11 @@ class DataService:
         statuses: set[str] | None,
         entries: set[str] | None,
         months: set[str] | None,
+        majors: set[str] | None,
+        employers: set[str] | None,
+        detail_cities: set[str] | None,
+        detail_states: set[str] | None,
+        search_text: str | None,
     ) -> list[dict[str, str]]:
         return analytics.filter_rows(
             rows,
@@ -274,6 +329,11 @@ class DataService:
             statuses=statuses,
             entries=entries,
             months=months,
+            majors=majors,
+            employers=employers,
+            detail_cities=detail_cities,
+            detail_states=detail_states,
+            search_text=search_text,
         )
 
     def get_meta(self) -> dict[str, Any]:

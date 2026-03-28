@@ -89,6 +89,10 @@ class OptionsResponse(BaseModel):
     consulates: list[str]
     statuses: list[str]
     entries: list[str]
+    majors: list[str]
+    employers: list[str]
+    detail_cities: list[str]
+    detail_states: list[str]
     fetch_sources: list[str]
 
 

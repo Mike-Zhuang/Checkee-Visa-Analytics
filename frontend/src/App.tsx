@@ -47,7 +47,12 @@ const EMPTY_FILTERS: Filters = {
     consulates: [],
     statuses: [],
     entries: [],
-    months: []
+    months: [],
+    majors: [],
+    employers: [],
+    detail_cities: [],
+    detail_states: [],
+    search_text: ''
 }
 
 type ErrorKey =
@@ -106,6 +111,10 @@ export default function App() {
         consulates: [],
         statuses: [],
         entries: [],
+        majors: [],
+        employers: [],
+        detail_cities: [],
+        detail_states: [],
         fetch_sources: []
     })
     const [consulateGroups, setConsulateGroups] = useState<ConsulateGroup[]>([])

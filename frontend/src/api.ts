@@ -21,16 +21,27 @@ const API_BASE = frontendConfig.apiBaseUrl
 
 export function paramsFromFilters(filters: Filters): URLSearchParams {
     const params = new URLSearchParams()
-    const assign = (key: keyof Filters) => {
-        if (filters[key].length) {
-            params.set(key, filters[key].join(','))
+    const assignArray = (key: Exclude<keyof Filters, 'search_text'>) => {
+        const values = filters[key]
+        if (values.length) {
+            params.set(key, values.join(','))
         }
     }
-    assign('visa_types')
-    assign('consulates')
-    assign('statuses')
-    assign('entries')
-    assign('months')
+    assignArray('visa_types')
+    assignArray('consulates')
+    assignArray('statuses')
+    assignArray('entries')
+    assignArray('months')
+    assignArray('majors')
+    assignArray('employers')
+    assignArray('detail_cities')
+    assignArray('detail_states')
+
+    const searchText = filters.search_text.trim()
+    if (searchText) {
+        params.set('search_text', searchText)
+    }
+
     return params
 }
 

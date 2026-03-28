@@ -11,6 +11,10 @@ const options: OptionsResponse = {
     consulates: ['BeiJing', 'Toronto'],
     statuses: ['Pending', 'Clear'],
     entries: ['I20', 'I129'],
+    majors: ['CS', 'Math'],
+    employers: ['Google', 'Amazon'],
+    detail_cities: ['Beijing', 'Toronto'],
+    detail_states: ['Beijing', 'Ontario'],
     fetch_sources: ['monthly_track', 'latest_snapshot']
 }
 
@@ -24,7 +28,12 @@ const emptyFilters: Filters = {
     consulates: [],
     statuses: [],
     entries: [],
-    months: []
+    months: [],
+    majors: [],
+    employers: [],
+    detail_cities: [],
+    detail_states: [],
+    search_text: ''
 }
 
 describe('FilterBar', () => {
@@ -203,5 +212,39 @@ describe('FilterBar', () => {
 
         expect(screen.queryByRole('button', { name: '开始刷新数据' })).not.toBeInTheDocument()
         expect(screen.getByRole('button', { name: '重置筛选' })).toBeInTheDocument()
+    })
+
+    it('输入文本搜索应触发 search_text 更新', async () => {
+        const onChange = vi.fn()
+        const user = userEvent.setup()
+
+        render(
+            <FilterBar
+                options={options}
+                consulateGroups={groups}
+                filters={emptyFilters}
+                refreshFromMonth=""
+                refreshSources={['monthly_track']}
+                availableRefreshSources={options.fetch_sources}
+                defaultRefreshMonths={6}
+                showConsulateGroups={true}
+                isRefreshing={false}
+                refreshFeedback={null}
+                onRefreshFromMonthChange={vi.fn()}
+                onRefreshSourcesChange={vi.fn()}
+                onChange={onChange}
+                onReset={vi.fn()}
+                onRefresh={vi.fn()}
+            />
+        )
+
+        await user.type(screen.getByPlaceholderText('例如：amazon cleared'), 'amazon')
+        expect(onChange).toHaveBeenCalled()
+        const latestCallIndex = onChange.mock.calls.length - 1
+        const latestPayload = latestCallIndex >= 0 ? onChange.mock.calls[latestCallIndex][0] : null
+        expect(latestPayload).toEqual({
+            ...emptyFilters,
+            search_text: 'n'
+        })
     })
 })

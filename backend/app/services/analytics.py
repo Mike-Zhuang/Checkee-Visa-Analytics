@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import random
+import re
 from datetime import date
 from statistics import mean, median
 from typing import Any
@@ -103,7 +104,15 @@ def filter_rows(
     statuses: set[str] | None = None,
     entries: set[str] | None = None,
     months: set[str] | None = None,
+    majors: set[str] | None = None,
+    employers: set[str] | None = None,
+    detail_cities: set[str] | None = None,
+    detail_states: set[str] | None = None,
+    search_text: str | None = None,
 ) -> list[dict[str, str]]:
+    compact_search = re.sub(r"\s+", " ", search_text or "").strip().lower()
+    search_terms = [term for term in compact_search.split(" ") if term]
+
     out: list[dict[str, str]] = []
     for r in rows:
         m = (r.get("check_date") or "")[:7]
@@ -117,6 +126,23 @@ def filter_rows(
             continue
         if months and m not in months:
             continue
+        if majors and (r.get("major") or "") not in majors:
+            continue
+        if employers and (r.get("detail_employer") or "") not in employers:
+            continue
+        if detail_cities and (r.get("detail_city") or "") not in detail_cities:
+            continue
+        if detail_states and (r.get("detail_state") or "") not in detail_states:
+            continue
+        if search_terms:
+            searchable = " ".join(
+                [
+                    str(r.get("detail_note") or ""),
+                    str(r.get("detail_employer") or ""),
+                ]
+            ).lower()
+            if not all(term in searchable for term in search_terms):
+                continue
         out.append(r)
     return out
 
@@ -388,12 +414,20 @@ def options(rows: list[dict[str, str]]) -> dict[str, list[str]]:
     consulates = sorted({r.get("consulate") or "" for r in rows if r.get("consulate")})
     statuses = sorted({r.get("status") or "" for r in rows if r.get("status")})
     entries = sorted({r.get("visa_entry") or "" for r in rows if r.get("visa_entry")})
+    majors = sorted({r.get("major") or "" for r in rows if r.get("major")})
+    employers = sorted({r.get("detail_employer") or "" for r in rows if r.get("detail_employer")})
+    detail_cities = sorted({r.get("detail_city") or "" for r in rows if r.get("detail_city")})
+    detail_states = sorted({r.get("detail_state") or "" for r in rows if r.get("detail_state")})
     return {
         "months": months,
         "visa_types": visa_types,
         "consulates": consulates,
         "statuses": statuses,
         "entries": entries,
+        "majors": majors,
+        "employers": employers,
+        "detail_cities": detail_cities,
+        "detail_states": detail_states,
     }
 
 

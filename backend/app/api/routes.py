@@ -54,6 +54,11 @@ def _filtered_rows(
     statuses: str | None,
     entries: str | None,
     months: str | None,
+    majors: str | None,
+    employers: str | None,
+    detail_cities: str | None,
+    detail_states: str | None,
+    search_text: str | None,
 ):
     rows = service.get_cases()
     if not rows:
@@ -65,6 +70,11 @@ def _filtered_rows(
         statuses=_split_csv_values(statuses),
         entries=_split_csv_values(entries),
         months=_split_csv_values(months),
+        majors=_split_csv_values(majors),
+        employers=_split_csv_values(employers),
+        detail_cities=_split_csv_values(detail_cities),
+        detail_states=_split_csv_values(detail_states),
+        search_text=(search_text or "").strip() or None,
     )
 
 
@@ -207,6 +217,10 @@ def options() -> OptionsResponse:
             consulates=[],
             statuses=[],
             entries=[],
+            majors=[],
+            employers=[],
+            detail_cities=[],
+            detail_states=[],
             fetch_sources=list_supported_sources(),
         )
     return OptionsResponse(**service.get_options(rows), fetch_sources=list_supported_sources())
@@ -233,10 +247,26 @@ def cases(
     statuses: str | None = Query(default=None),
     entries: str | None = Query(default=None),
     months: str | None = Query(default=None),
+    majors: str | None = Query(default=None),
+    employers: str | None = Query(default=None),
+    detail_cities: str | None = Query(default=None),
+    detail_states: str | None = Query(default=None),
+    search_text: str | None = Query(default=None),
     limit: int = Query(default=API_DEFAULT_CASES_LIMIT, ge=1, le=API_MAX_CASES_LIMIT),
     offset: int = Query(default=0, ge=0),
 ):
-    filtered = _filtered_rows(visa_types, consulates, statuses, entries, months)
+    filtered = _filtered_rows(
+        visa_types,
+        consulates,
+        statuses,
+        entries,
+        months,
+        majors,
+        employers,
+        detail_cities,
+        detail_states,
+        search_text,
+    )
     total = len(filtered)
     data = filtered[offset : offset + limit]
     return {"total": total, "limit": limit, "offset": offset, "items": data}
@@ -249,8 +279,24 @@ def overview(
     statuses: str | None = None,
     entries: str | None = None,
     months: str | None = None,
+    majors: str | None = None,
+    employers: str | None = None,
+    detail_cities: str | None = None,
+    detail_states: str | None = None,
+    search_text: str | None = None,
 ):
-    filtered = _filtered_rows(visa_types, consulates, statuses, entries, months)
+    filtered = _filtered_rows(
+        visa_types,
+        consulates,
+        statuses,
+        entries,
+        months,
+        majors,
+        employers,
+        detail_cities,
+        detail_states,
+        search_text,
+    )
     return service.get_overview(filtered)
 
 
@@ -261,8 +307,24 @@ def monthly(
     statuses: str | None = None,
     entries: str | None = None,
     months: str | None = None,
+    majors: str | None = None,
+    employers: str | None = None,
+    detail_cities: str | None = None,
+    detail_states: str | None = None,
+    search_text: str | None = None,
 ):
-    filtered = _filtered_rows(visa_types, consulates, statuses, entries, months)
+    filtered = _filtered_rows(
+        visa_types,
+        consulates,
+        statuses,
+        entries,
+        months,
+        majors,
+        employers,
+        detail_cities,
+        detail_states,
+        search_text,
+    )
     return {"items": service.get_monthly(filtered)}
 
 
@@ -273,8 +335,24 @@ def sensitivity(
     statuses: str | None = None,
     entries: str | None = None,
     months: str | None = None,
+    majors: str | None = None,
+    employers: str | None = None,
+    detail_cities: str | None = None,
+    detail_states: str | None = None,
+    search_text: str | None = None,
 ):
-    filtered = _filtered_rows(visa_types, consulates, statuses, entries, months)
+    filtered = _filtered_rows(
+        visa_types,
+        consulates,
+        statuses,
+        entries,
+        months,
+        majors,
+        employers,
+        detail_cities,
+        detail_states,
+        search_text,
+    )
     return {"items": service.get_sensitivity(filtered)}
 
 
@@ -285,8 +363,24 @@ def cohorts(
     statuses: str | None = None,
     entries: str | None = None,
     months: str | None = None,
+    majors: str | None = None,
+    employers: str | None = None,
+    detail_cities: str | None = None,
+    detail_states: str | None = None,
+    search_text: str | None = None,
 ):
-    filtered = _filtered_rows(visa_types, consulates, statuses, entries, months)
+    filtered = _filtered_rows(
+        visa_types,
+        consulates,
+        statuses,
+        entries,
+        months,
+        majors,
+        employers,
+        detail_cities,
+        detail_states,
+        search_text,
+    )
     items = [CohortStatsRow(**item).model_dump() for item in service.get_cohorts(filtered)]
     return {"items": items}
 
@@ -298,8 +392,24 @@ def distribution(
     statuses: str | None = None,
     entries: str | None = None,
     months: str | None = None,
+    majors: str | None = None,
+    employers: str | None = None,
+    detail_cities: str | None = None,
+    detail_states: str | None = None,
+    search_text: str | None = None,
 ):
-    filtered = _filtered_rows(visa_types, consulates, statuses, entries, months)
+    filtered = _filtered_rows(
+        visa_types,
+        consulates,
+        statuses,
+        entries,
+        months,
+        majors,
+        employers,
+        detail_cities,
+        detail_states,
+        search_text,
+    )
     items = [DistributionRow(**item).model_dump() for item in service.get_distribution(filtered)]
     return {"items": items}
 
@@ -311,8 +421,24 @@ def comparison(
     statuses: str | None = None,
     entries: str | None = None,
     months: str | None = None,
+    majors: str | None = None,
+    employers: str | None = None,
+    detail_cities: str | None = None,
+    detail_states: str | None = None,
+    search_text: str | None = None,
 ) -> ComparisonResponse:
-    filtered = _filtered_rows(visa_types, consulates, statuses, entries, months)
+    filtered = _filtered_rows(
+        visa_types,
+        consulates,
+        statuses,
+        entries,
+        months,
+        majors,
+        employers,
+        detail_cities,
+        detail_states,
+        search_text,
+    )
     return ComparisonResponse(**service.get_comparison(filtered))
 
 
@@ -323,10 +449,26 @@ def anomalies(
     statuses: str | None = None,
     entries: str | None = None,
     months: str | None = None,
+    majors: str | None = None,
+    employers: str | None = None,
+    detail_cities: str | None = None,
+    detail_states: str | None = None,
+    search_text: str | None = None,
     threshold_days: int = Query(default=120, ge=1),
     limit: int = Query(default=50, ge=1, le=500),
 ):
-    filtered = _filtered_rows(visa_types, consulates, statuses, entries, months)
+    filtered = _filtered_rows(
+        visa_types,
+        consulates,
+        statuses,
+        entries,
+        months,
+        majors,
+        employers,
+        detail_cities,
+        detail_states,
+        search_text,
+    )
     items = [
         AnomalyRow(**item).model_dump()
         for item in service.get_anomalies(filtered, threshold_days=threshold_days, limit=limit)
@@ -341,8 +483,24 @@ def export_report(
     statuses: str | None = None,
     entries: str | None = None,
     months: str | None = None,
+    majors: str | None = None,
+    employers: str | None = None,
+    detail_cities: str | None = None,
+    detail_states: str | None = None,
+    search_text: str | None = None,
 ):
-    filtered = _filtered_rows(visa_types, consulates, statuses, entries, months)
+    filtered = _filtered_rows(
+        visa_types,
+        consulates,
+        statuses,
+        entries,
+        months,
+        majors,
+        employers,
+        detail_cities,
+        detail_states,
+        search_text,
+    )
     return service.get_report(filtered)
 
 
@@ -353,8 +511,24 @@ def export_cases_csv(
     statuses: str | None = None,
     entries: str | None = None,
     months: str | None = None,
+    majors: str | None = None,
+    employers: str | None = None,
+    detail_cities: str | None = None,
+    detail_states: str | None = None,
+    search_text: str | None = None,
 ):
-    rows = _filtered_rows(visa_types, consulates, statuses, entries, months)
+    rows = _filtered_rows(
+        visa_types,
+        consulates,
+        statuses,
+        entries,
+        months,
+        majors,
+        employers,
+        detail_cities,
+        detail_states,
+        search_text,
+    )
     if not rows:
         rows = []
 
@@ -375,6 +549,10 @@ def export_cases_csv(
         "event",
         "detail_url",
         "update_url",
+        "detail_employer",
+        "detail_note",
+        "detail_city",
+        "detail_state",
     ]
 
     import csv
