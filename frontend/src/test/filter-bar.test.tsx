@@ -10,7 +10,8 @@ const options: OptionsResponse = {
     visa_types: ['F1', 'H1B'],
     consulates: ['BeiJing', 'Toronto'],
     statuses: ['Pending', 'Clear'],
-    entries: ['I20', 'I129']
+    entries: ['I20', 'I129'],
+    fetch_sources: ['monthly_track', 'latest_snapshot']
 }
 
 const groups: ConsulateGroup[] = [
@@ -34,9 +35,12 @@ describe('FilterBar', () => {
                 consulateGroups={groups}
                 filters={emptyFilters}
                 refreshFromMonth=""
+                refreshSources={['monthly_track']}
+                availableRefreshSources={options.fetch_sources}
                 defaultRefreshMonths={6}
                 showConsulateGroups={true}
                 onRefreshFromMonthChange={vi.fn()}
+                onRefreshSourcesChange={vi.fn()}
                 onChange={vi.fn()}
                 onReset={vi.fn()}
                 onRefresh={vi.fn()}
@@ -58,9 +62,12 @@ describe('FilterBar', () => {
                 consulateGroups={groups}
                 filters={emptyFilters}
                 refreshFromMonth=""
+                refreshSources={['monthly_track']}
+                availableRefreshSources={options.fetch_sources}
                 defaultRefreshMonths={6}
                 showConsulateGroups={true}
                 onRefreshFromMonthChange={vi.fn()}
+                onRefreshSourcesChange={vi.fn()}
                 onChange={onChange}
                 onReset={vi.fn()}
                 onRefresh={vi.fn()}

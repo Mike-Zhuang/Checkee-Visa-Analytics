@@ -8,13 +8,18 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 
 from app.core.config import API_DEFAULT_CASES_LIMIT, API_MAX_CASES_LIMIT
 from app.core.schemas import (
+    AnomalyRow,
+    CohortStatsRow,
+    ComparisonResponse,
     ConsulateGroupsResponse,
+    DistributionRow,
     HealthResponse,
     OptionsResponse,
     RefreshRequest,
     RefreshResponse,
 )
 from app.services.data_service import service
+from app.services.scraper import list_supported_sources
 
 router = APIRouter(prefix="/api/v1", tags=["checkee"])
 
@@ -59,7 +64,12 @@ def health() -> HealthResponse:
 @router.post("/tasks/refresh", response_model=RefreshResponse)
 def refresh(req: RefreshRequest) -> RefreshResponse:
     try:
-        result = service.refresh(all_months=req.all_months, months=req.months, from_month=req.from_month)
+        result = service.refresh(
+            all_months=req.all_months,
+            months=req.months,
+            from_month=req.from_month,
+            sources=req.sources,
+        )
         return RefreshResponse(**result)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -71,8 +81,15 @@ def refresh(req: RefreshRequest) -> RefreshResponse:
 def options() -> OptionsResponse:
     rows = service.get_cases()
     if not rows:
-        return OptionsResponse(months=[], visa_types=[], consulates=[], statuses=[], entries=[])
-    return OptionsResponse(**service.get_options(rows))
+        return OptionsResponse(
+            months=[],
+            visa_types=[],
+            consulates=[],
+            statuses=[],
+            entries=[],
+            fetch_sources=list_supported_sources(),
+        )
+    return OptionsResponse(**service.get_options(rows), fetch_sources=list_supported_sources())
 
 
 @router.get("/meta/state")
@@ -139,6 +156,62 @@ def sensitivity(
 ):
     filtered = _filtered_rows(visa_types, consulates, statuses, entries, months)
     return {"items": service.get_sensitivity(filtered)}
+
+
+@router.get("/stats/cohorts")
+def cohorts(
+    visa_types: str | None = None,
+    consulates: str | None = None,
+    statuses: str | None = None,
+    entries: str | None = None,
+    months: str | None = None,
+):
+    filtered = _filtered_rows(visa_types, consulates, statuses, entries, months)
+    items = [CohortStatsRow(**item).model_dump() for item in service.get_cohorts(filtered)]
+    return {"items": items}
+
+
+@router.get("/stats/distribution")
+def distribution(
+    visa_types: str | None = None,
+    consulates: str | None = None,
+    statuses: str | None = None,
+    entries: str | None = None,
+    months: str | None = None,
+):
+    filtered = _filtered_rows(visa_types, consulates, statuses, entries, months)
+    items = [DistributionRow(**item).model_dump() for item in service.get_distribution(filtered)]
+    return {"items": items}
+
+
+@router.get("/stats/comparison", response_model=ComparisonResponse)
+def comparison(
+    visa_types: str | None = None,
+    consulates: str | None = None,
+    statuses: str | None = None,
+    entries: str | None = None,
+    months: str | None = None,
+) -> ComparisonResponse:
+    filtered = _filtered_rows(visa_types, consulates, statuses, entries, months)
+    return ComparisonResponse(**service.get_comparison(filtered))
+
+
+@router.get("/stats/anomalies")
+def anomalies(
+    visa_types: str | None = None,
+    consulates: str | None = None,
+    statuses: str | None = None,
+    entries: str | None = None,
+    months: str | None = None,
+    threshold_days: int = Query(default=120, ge=1),
+    limit: int = Query(default=50, ge=1, le=500),
+):
+    filtered = _filtered_rows(visa_types, consulates, statuses, entries, months)
+    items = [
+        AnomalyRow(**item).model_dump()
+        for item in service.get_anomalies(filtered, threshold_days=threshold_days, limit=limit)
+    ]
+    return {"items": items}
 
 
 @router.get("/export/report", response_class=PlainTextResponse)

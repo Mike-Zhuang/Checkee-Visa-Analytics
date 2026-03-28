@@ -1,6 +1,10 @@
 import type {
+    AnomalyItem,
     CaseItem,
+    CohortItem,
+    ComparisonData,
     ConsulateGroupsResponse,
+    DistributionItem,
     Filters,
     MetaState,
     MonthlyItem,
@@ -76,6 +80,34 @@ export async function getSensitivity(filters: Filters): Promise<SensitivityItem[
     const params = paramsFromFilters(filters)
     const query = params.toString()
     const data = await fetchJson<{ items: SensitivityItem[] }>(`/stats/sensitivity${query ? `?${query}` : ''}`)
+    return data.items
+}
+
+export async function getCohorts(filters: Filters): Promise<CohortItem[]> {
+    const params = paramsFromFilters(filters)
+    const query = params.toString()
+    const data = await fetchJson<{ items: CohortItem[] }>(`/stats/cohorts${query ? `?${query}` : ''}`)
+    return data.items
+}
+
+export async function getDistribution(filters: Filters): Promise<DistributionItem[]> {
+    const params = paramsFromFilters(filters)
+    const query = params.toString()
+    const data = await fetchJson<{ items: DistributionItem[] }>(`/stats/distribution${query ? `?${query}` : ''}`)
+    return data.items
+}
+
+export async function getComparison(filters: Filters): Promise<ComparisonData> {
+    const params = paramsFromFilters(filters)
+    const query = params.toString()
+    return fetchJson<ComparisonData>(`/stats/comparison${query ? `?${query}` : ''}`)
+}
+
+export async function getAnomalies(filters: Filters, thresholdDays = 120, limit = 50): Promise<AnomalyItem[]> {
+    const params = paramsFromFilters(filters)
+    params.set('threshold_days', String(thresholdDays))
+    params.set('limit', String(limit))
+    const data = await fetchJson<{ items: AnomalyItem[] }>(`/stats/anomalies?${params.toString()}`)
     return data.items
 }
 

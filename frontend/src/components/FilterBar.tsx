@@ -6,9 +6,12 @@ type Props = {
     consulateGroups: ConsulateGroup[]
     filters: Filters
     refreshFromMonth: string
+    refreshSources: string[]
+    availableRefreshSources: string[]
     defaultRefreshMonths: number
     showConsulateGroups: boolean
     onRefreshFromMonthChange: (value: string) => void
+    onRefreshSourcesChange: (value: string[]) => void
     onChange: (next: Filters) => void
     onReset: () => void
     onRefresh: (payload: RefreshPayload) => void
@@ -60,9 +63,12 @@ export default function FilterBar({
     consulateGroups,
     filters,
     refreshFromMonth,
+    refreshSources,
+    availableRefreshSources,
     defaultRefreshMonths,
     showConsulateGroups,
     onRefreshFromMonthChange,
+    onRefreshSourcesChange,
     onChange,
     onReset,
     onRefresh
@@ -111,14 +117,32 @@ export default function FilterBar({
                         onChange={(e) => onRefreshFromMonthChange(e.currentTarget.value)}
                     />
                 </label>
+                <label className="field field-inline" htmlFor="refresh-sources">
+                    <span>{t('filter.refreshSources')}</span>
+                    <select
+                        id="refresh-sources"
+                        multiple
+                        value={refreshSources}
+                        onChange={(e) => {
+                            const next = Array.from(e.currentTarget.selectedOptions).map((o) => o.value)
+                            onRefreshSourcesChange(next)
+                        }}
+                    >
+                        {availableRefreshSources.map((source) => (
+                            <option key={source} value={source}>{source}</option>
+                        ))}
+                    </select>
+                </label>
                 <div className="actions compact">
                     <button
                         type="button"
+                        disabled={refreshSources.length === 0}
                         onClick={() =>
                             onRefresh({
                                 all_months: false,
                                 months: defaultRefreshMonths,
-                                from_month: refreshFromMonth || null
+                                from_month: refreshFromMonth || null,
+                                sources: refreshSources
                             })
                         }
                     >

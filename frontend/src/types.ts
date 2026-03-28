@@ -4,6 +4,7 @@ export type OptionsResponse = {
     consulates: string[]
     statuses: string[]
     entries: string[]
+    fetch_sources: string[]
 }
 
 export type ConsulateGroup = {
@@ -34,6 +35,8 @@ export type MetaState = {
         latest: string | null
         earliest: string | null
     }
+    selected_sources?: string[]
+    supported_sources?: string[]
 }
 
 export type OverviewStats = {
@@ -105,4 +108,48 @@ export type RefreshPayload = {
     all_months?: boolean
     months?: number
     from_month?: string | null
+    sources?: string[]
+}
+
+export type CohortItem = {
+    cohort: string
+    total_cases: number
+    finalized_cases: number
+    pending_cases: number
+    maturity_ratio: number
+    median_days: number | null
+    p90_days: number | null
+    long_tail_90plus_ratio: number | null
+}
+
+export type DistributionItem = {
+    bucket: string
+    count: number
+    ratio: number
+}
+
+export type ComparisonMetrics = {
+    median_days: number
+    p90_days: number
+    pending_ratio: number
+}
+
+export type ComparisonData = {
+    latest_month: string | null
+    baseline_month: string | null
+    latest: ComparisonMetrics | null
+    baseline: ComparisonMetrics | null
+    delta: ComparisonMetrics | null
+}
+
+export type AnomalyItem = {
+    case_number: string
+    visa_type: string
+    consulate: string
+    status: string
+    check_date: string
+    days: number
+    reason: string
+    detail_url: string
+    update_url: string
 }

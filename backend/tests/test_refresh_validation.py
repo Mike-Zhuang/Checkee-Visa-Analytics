@@ -11,7 +11,7 @@ def test_refresh_months_out_of_range(client) -> None:
 def test_refresh_invalid_from_month_returns_400(client, monkeypatch) -> None:
     from app.api import routes
 
-    def fake_refresh(*, all_months: bool, months: int, from_month: str | None):
+    def fake_refresh(*, all_months: bool, months: int, from_month: str | None, sources: list[str] | None):
         raise ValueError("from_month must be in YYYY-MM format")
 
     monkeypatch.setattr(routes.service, "refresh", fake_refresh)
@@ -26,12 +26,13 @@ def test_refresh_invalid_from_month_returns_400(client, monkeypatch) -> None:
 def test_refresh_success_payload(client, monkeypatch) -> None:
     from app.api import routes
 
-    def fake_refresh(*, all_months: bool, months: int, from_month: str | None):
+    def fake_refresh(*, all_months: bool, months: int, from_month: str | None, sources: list[str] | None):
         return {
             "success": True,
             "message": "refresh completed",
             "fetched_months": ["2026-03", "2026-02"],
             "total_cases": 123,
+            "selected_sources": ["monthly_track"],
             "truncated_by_limit": False,
             "month_limit": 120,
             "generated_at": datetime.now(),
@@ -44,3 +45,19 @@ def test_refresh_success_payload(client, monkeypatch) -> None:
     assert payload["success"] is True
     assert payload["total_cases"] == 123
     assert payload["fetched_months"] == ["2026-03", "2026-02"]
+    assert payload["selected_sources"] == ["monthly_track"]
+
+
+def test_refresh_unsupported_sources_returns_400(client, monkeypatch) -> None:
+    from app.api import routes
+
+    def fake_refresh(*, all_months: bool, months: int, from_month: str | None, sources: list[str] | None):
+        raise ValueError("unsupported sources: legacy_table; supported sources: monthly_track")
+
+    monkeypatch.setattr(routes.service, "refresh", fake_refresh)
+    response = client.post(
+        "/api/v1/tasks/refresh",
+        json={"all_months": False, "months": 3, "sources": ["legacy_table"]},
+    )
+    assert response.status_code == 400
+    assert "unsupported sources" in response.json()["detail"]

@@ -293,6 +293,10 @@ GitHub Actions 工作流位于 `.github/workflows/ci.yml`，在 `push`/`pull_req
 | GET | `/api/v1/stats/overview` | 获取总体统计 |
 | GET | `/api/v1/stats/monthly` | 获取月度统计 |
 | GET | `/api/v1/stats/sensitivity` | 获取敏感性分析 |
+| GET | `/api/v1/stats/cohorts` | 获取分群统计（按签证类型） |
+| GET | `/api/v1/stats/distribution` | 获取结案时长分布桶 |
+| GET | `/api/v1/stats/comparison` | 获取最新月 vs 基线月对比 |
+| GET | `/api/v1/stats/anomalies` | 获取异常长尾案例 |
 | GET | `/api/v1/export/report` | 导出 Markdown 报告 |
 | GET | `/api/v1/export/cases.csv` | 导出案例 CSV |
 
@@ -320,6 +324,12 @@ GitHub Actions 工作流位于 `.github/workflows/ci.yml`，在 `push`/`pull_req
 │   │   └── App.tsx
 │   ├── .env.example
 │   └── package.json
+├── deploy/
+│   ├── env/
+│   ├── nginx/
+│   ├── scripts/
+│   └── systemd/
+├── DEPLOY_VPS.md
 ├── .vscode/
 ├── LICENSE
 └── README.md
@@ -338,17 +348,28 @@ GitHub Actions 工作流位于 `.github/workflows/ci.yml`，在 `push`/`pull_req
 - all_months: 是否抓取全部可见月份
 - months: 最近 N 月抓取窗口（默认 6）
 - from_month: 指定起始月份（格式 YYYY-MM），例如 2025-01
+- sources: 抓取来源列表（可选值：`monthly_track`、`latest_snapshot`）
 
 说明：
 
 - from_month 优先于 months。
 - 后端会应用月份安全上限保护，并在响应中返回 truncated_by_limit 与 month_limit。
 
+## 公网部署（VPS）
+
+项目已提供单机 VPS 部署资产：
+
+- Nginx 反向代理与限流模板：`deploy/nginx/checkee.conf`
+- systemd 服务模板：`deploy/systemd/checkee-backend.service`
+- 生产环境变量模板：`deploy/env/backend.env.example`
+- 一键部署脚本：`deploy/scripts/deploy-backend.sh`
+- 部署说明文档：`DEPLOY_VPS.md`
+
 ## 路线图
 
 - [ ] 增加定时刷新任务（6h / 12h / 24h）
 - [x] 增加测试体系（后端 pytest + 前端 Vitest/RTL）
-- [ ] 增加部署模板（Docker / 云部署）
+- [x] 增加部署模板（VPS: Nginx + systemd）
 - [x] 增加权限与配置管理（环境变量化）
 - [ ] 增加更高覆盖率目标与回归集扩展
 

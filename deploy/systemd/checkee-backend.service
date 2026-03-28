@@ -1,0 +1,17 @@
+[Unit]
+Description=Checkee Analytics Backend (FastAPI/Uvicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/checkee
+EnvironmentFile=/opt/checkee/deploy/env/backend.env
+ExecStart=/opt/checkee/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

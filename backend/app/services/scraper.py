@@ -4,6 +4,7 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import date
+from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse
 
 import requests
@@ -18,6 +19,11 @@ from app.core.config import (
     RETRY_SLEEP_SECONDS,
     USER_AGENT,
 )
+
+
+DEFAULT_FETCH_SOURCE = "monthly_track"
+LATEST_FETCH_SOURCE = "latest_snapshot"
+SUPPORTED_FETCH_SOURCES = frozenset({DEFAULT_FETCH_SOURCE, LATEST_FETCH_SOURCE})
 
 
 @dataclass
@@ -40,6 +46,16 @@ class CaseRow:
     update_url: str
 
 
+@dataclass
+class FetchResult:
+    rows: list[CaseRow]
+    fetched_months: list[str]
+    truncated_by_limit: bool
+    selected_sources: list[str]
+    source_discovery: dict[str, str]
+    coverage: dict[str, Any]
+
+
 def _parse_date(value: str) -> date | None:
     from datetime import datetime
 
@@ -58,6 +74,79 @@ def _month_key(value: str) -> tuple[int, int]:
 
 def _is_month_token(value: str) -> bool:
     return re.fullmatch(r"\d{4}-\d{2}", value) is not None
+
+
+def _slug_text(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+    return slug or "unnamed"
+
+
+def _dedupe_key(key_base: str, existing: set[str]) -> str:
+    if key_base not in existing:
+        return key_base
+    suffix = 2
+    while f"{key_base}_{suffix}" in existing:
+        suffix += 1
+    return f"{key_base}_{suffix}"
+
+
+def _extract_entry_points(index_html: str) -> dict[str, str]:
+    soup = BeautifulSoup(index_html, "html.parser")
+    entry_points: dict[str, str] = {}
+
+    for anchor in soup.find_all("a"):
+        href = (anchor.get("href") or "").strip()
+        if not href:
+            continue
+        label = anchor.get_text(" ", strip=True)
+        if not label:
+            parsed = urlparse(href)
+            label = parsed.path.rsplit("/", 1)[-1] or "link"
+        key_base = f"link_{_slug_text(label)}"
+        key = _dedupe_key(key_base, set(entry_points))
+        entry_points[key] = urljoin(CHECKEE_BASE_URL, href)
+
+    for form in soup.find_all("form"):
+        action = (form.get("action") or "").strip()
+        if not action:
+            continue
+        label = form.get_text(" ", strip=True)
+        if not label:
+            parsed = urlparse(action)
+            label = parsed.path.rsplit("/", 1)[-1] or "form"
+        key_base = f"form_{_slug_text(label)}"
+        key = _dedupe_key(key_base, set(entry_points))
+        entry_points[key] = urljoin(CHECKEE_BASE_URL, action)
+
+    return entry_points
+
+
+def list_supported_sources() -> list[str]:
+    return sorted(SUPPORTED_FETCH_SOURCES)
+
+
+def _normalize_sources(sources: list[str] | None) -> list[str]:
+    if sources is None:
+        return [DEFAULT_FETCH_SOURCE]
+
+    normalized: list[str] = []
+    for raw_source in sources:
+        token = str(raw_source).strip().lower().replace("-", "_")
+        if not token:
+            continue
+        if token not in normalized:
+            normalized.append(token)
+
+    if not normalized:
+        raise ValueError("sources must include at least one non-empty value")
+
+    unsupported = [token for token in normalized if token not in SUPPORTED_FETCH_SOURCES]
+    if unsupported:
+        supported_str = ", ".join(list_supported_sources())
+        unsupported_str = ", ".join(unsupported)
+        raise ValueError(f"unsupported sources: {unsupported_str}; supported sources: {supported_str}")
+
+    return normalized
 
 
 def _session() -> requests.Session:
@@ -223,25 +312,77 @@ def fetch_cases(
     all_months: bool = False,
     months: int = 6,
     from_month: str | None = None,
-) -> tuple[list[CaseRow], list[str], bool]:
+    sources: list[str] | None = None,
+) -> FetchResult:
     session = _session()
     observation_date = date.today()
+    selected_sources = _normalize_sources(sources)
 
     index_html = _fetch_html(session, CHECKEE_BASE_URL)
-    all_available_months = _extract_months(index_html)
-    target_months, truncated_by_limit = _pick_months(
-        all_available_months,
-        all_months=all_months,
-        recent_n=months,
-        from_month=from_month,
-    )
+    source_discovery = _extract_entry_points(index_html)
+    all_available_months: list[str] = []
+    target_months: list[str] = []
+    truncated_by_limit = False
+    source_case_counts: dict[str, int] = {name: 0 for name in selected_sources}
+
+    if DEFAULT_FETCH_SOURCE in selected_sources:
+        all_available_months = _extract_months(index_html)
+        target_months, truncated_by_limit = _pick_months(
+            all_available_months,
+            all_months=all_months,
+            recent_n=months,
+            from_month=from_month,
+        )
 
     rows: list[CaseRow] = []
+    months_with_rows: list[str] = []
+    months_without_rows: list[str] = []
     for idx, month in enumerate(target_months):
         page_url = urljoin(CHECKEE_BASE_URL, f"main.php?dispdate={month}")
         html = _fetch_html(session, page_url)
-        rows.extend(_parse_month_rows(month, html, observation_date))
+        month_rows = _parse_month_rows(month, html, observation_date)
+        rows.extend(month_rows)
+        source_case_counts[DEFAULT_FETCH_SOURCE] = source_case_counts.get(DEFAULT_FETCH_SOURCE, 0) + len(month_rows)
+        if month_rows:
+            months_with_rows.append(month)
+        else:
+            months_without_rows.append(month)
         if idx < len(target_months) - 1:
             time.sleep(FETCH_DELAY_SECONDS)
 
-    return _dedupe(rows), target_months, truncated_by_limit
+    latest_snapshot_rows: list[CaseRow] = []
+    if LATEST_FETCH_SOURCE in selected_sources:
+        latest_url = urljoin(CHECKEE_BASE_URL, "main.php")
+        latest_html = _fetch_html(session, latest_url)
+        inferred_month = (
+            target_months[0]
+            if target_months
+            else (all_available_months[0] if all_available_months else observation_date.strftime("%Y-%m"))
+        )
+        latest_snapshot_rows = _parse_month_rows(inferred_month, latest_html, observation_date)
+        rows.extend(latest_snapshot_rows)
+        source_case_counts[LATEST_FETCH_SOURCE] = source_case_counts.get(LATEST_FETCH_SOURCE, 0) + len(latest_snapshot_rows)
+
+    deduped_rows = _dedupe(rows)
+    coverage = {
+        "selected_sources": selected_sources,
+        "source_case_counts": source_case_counts,
+        "available_month_count": len(all_available_months),
+        "selected_month_count": len(target_months),
+        "parsed_month_count": len(months_with_rows),
+        "latest_snapshot_case_count": len(latest_snapshot_rows),
+        "months_with_rows": months_with_rows,
+        "months_without_rows": months_without_rows,
+        "raw_case_count": len(rows),
+        "deduped_case_count": len(deduped_rows),
+        "dedup_removed_count": max(0, len(rows) - len(deduped_rows)),
+    }
+
+    return FetchResult(
+        rows=deduped_rows,
+        fetched_months=target_months,
+        truncated_by_limit=truncated_by_limit,
+        selected_sources=selected_sources,
+        source_discovery=source_discovery,
+        coverage=coverage,
+    )

@@ -8,6 +8,8 @@ def test_meta_options_and_state(client, seed_cases) -> None:
     assert "F1" in options_payload["visa_types"]
     assert "H1B" in options_payload["visa_types"]
     assert "BeiJing" in options_payload["consulates"]
+    assert "monthly_track" in options_payload["fetch_sources"]
+    assert "latest_snapshot" in options_payload["fetch_sources"]
 
     state_res = client.get("/api/v1/meta/state")
     assert state_res.status_code == 200

@@ -3,8 +3,12 @@ import { useTranslation } from 'react-i18next'
 import {
     exportCasesUrl,
     exportReportUrl,
+    getAnomalies,
     getCases,
+    getCohorts,
+    getComparison,
     getConsulateGroups,
+    getDistribution,
     getMetaState,
     getMonthly,
     getOptions,
@@ -14,13 +18,21 @@ import {
 } from './api'
 import { frontendConfig } from './config'
 import CaseTable from './components/CaseTable'
+import CohortTable from './components/CohortTable'
+import ComparisonPanel from './components/ComparisonPanel'
+import DistributionPanel from './components/DistributionPanel'
 import FilterBar from './components/FilterBar'
 import MonthlyChart from './components/MonthlyChart'
 import SensitivityTable from './components/SensitivityTable'
 import StatCards from './components/StatCards'
+import AnomalyTable from './components/AnomalyTable'
 import type {
+    AnomalyItem,
     CaseItem,
+    CohortItem,
+    ComparisonData,
     ConsulateGroup,
+    DistributionItem,
     Filters,
     MetaState,
     MonthlyItem,
@@ -38,7 +50,19 @@ const EMPTY_FILTERS: Filters = {
     months: []
 }
 
-type ErrorKey = 'overview' | 'monthly' | 'sensitivity' | 'metaState' | 'cases' | 'options' | 'groups' | 'refresh'
+type ErrorKey =
+    | 'overview'
+    | 'monthly'
+    | 'sensitivity'
+    | 'cohorts'
+    | 'distribution'
+    | 'comparison'
+    | 'anomalies'
+    | 'metaState'
+    | 'cases'
+    | 'options'
+    | 'groups'
+    | 'refresh'
 
 export default function App() {
     const { t, i18n } = useTranslation()
@@ -48,18 +72,24 @@ export default function App() {
     const [errors, setErrors] = useState<Partial<Record<ErrorKey, string>>>({})
     const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
     const [refreshFromMonth, setRefreshFromMonth] = useState('')
+    const [refreshSources, setRefreshSources] = useState<string[]>(['monthly_track'])
     const [options, setOptions] = useState<OptionsResponse>({
         months: [],
         visa_types: [],
         consulates: [],
         statuses: [],
-        entries: []
+        entries: [],
+        fetch_sources: []
     })
     const [consulateGroups, setConsulateGroups] = useState<ConsulateGroup[]>([])
     const [metaState, setMetaState] = useState<MetaState | null>(null)
     const [overview, setOverview] = useState<OverviewStats | null>(null)
     const [monthly, setMonthly] = useState<MonthlyItem[]>([])
     const [sensitivity, setSensitivity] = useState<SensitivityItem[]>([])
+    const [cohorts, setCohorts] = useState<CohortItem[]>([])
+    const [distribution, setDistribution] = useState<DistributionItem[]>([])
+    const [comparison, setComparison] = useState<ComparisonData | null>(null)
+    const [anomalies, setAnomalies] = useState<AnomalyItem[]>([])
     const [cases, setCases] = useState<CaseItem[]>([])
     const [caseTotal, setCaseTotal] = useState(0)
     const [page, setPage] = useState(1)
@@ -86,12 +116,25 @@ export default function App() {
 
     const fetchOverviewBundle = async (activeFilters: Filters) => {
         setOverviewLoading(true)
-        clearErrors(['overview', 'monthly', 'sensitivity', 'metaState'])
+        clearErrors(['overview', 'monthly', 'sensitivity', 'cohorts', 'distribution', 'comparison', 'anomalies', 'metaState'])
 
-        const [overviewRes, monthlyRes, sensitivityRes, stateRes] = await Promise.allSettled([
+        const [
+            overviewRes,
+            monthlyRes,
+            sensitivityRes,
+            cohortsRes,
+            distributionRes,
+            comparisonRes,
+            anomaliesRes,
+            stateRes
+        ] = await Promise.allSettled([
             getOverview(activeFilters),
             getMonthly(activeFilters),
             getSensitivity(activeFilters),
+            getCohorts(activeFilters),
+            getDistribution(activeFilters),
+            getComparison(activeFilters),
+            getAnomalies(activeFilters),
             getMetaState()
         ])
 
@@ -111,6 +154,30 @@ export default function App() {
             setSensitivity(sensitivityRes.value)
         } else {
             setError('sensitivity', t('errors.sensitivity', { message: formatReason(sensitivityRes.reason) }))
+        }
+
+        if (cohortsRes.status === 'fulfilled') {
+            setCohorts(cohortsRes.value)
+        } else {
+            setError('cohorts', t('errors.cohorts', { message: formatReason(cohortsRes.reason) }))
+        }
+
+        if (distributionRes.status === 'fulfilled') {
+            setDistribution(distributionRes.value)
+        } else {
+            setError('distribution', t('errors.distribution', { message: formatReason(distributionRes.reason) }))
+        }
+
+        if (comparisonRes.status === 'fulfilled') {
+            setComparison(comparisonRes.value)
+        } else {
+            setError('comparison', t('errors.comparison', { message: formatReason(comparisonRes.reason) }))
+        }
+
+        if (anomaliesRes.status === 'fulfilled') {
+            setAnomalies(anomaliesRes.value)
+        } else {
+            setError('anomalies', t('errors.anomalies', { message: formatReason(anomaliesRes.reason) }))
         }
 
         if (stateRes.status === 'fulfilled') {
@@ -147,6 +214,14 @@ export default function App() {
         clearErrors(['options', 'groups'])
         if (optionsRes.status === 'fulfilled') {
             setOptions(optionsRes.value)
+            setRefreshSources((prev) => {
+                const fetched = optionsRes.value.fetch_sources
+                if (fetched.length === 0) return prev
+                const kept = prev.filter((item) => fetched.includes(item))
+                if (kept.length > 0) return kept
+                if (fetched.includes('monthly_track')) return ['monthly_track']
+                return [fetched[0]]
+            })
         } else {
             setError('options', t('errors.options', { message: formatReason(optionsRes.reason) }))
         }
@@ -256,6 +331,13 @@ export default function App() {
                         latest: metaState?.fetched_month_range?.latest ?? t('common.na')
                     })}
                 </span>
+                <span>
+                    {t('app.selectedSources', {
+                        value: (metaState?.selected_sources && metaState.selected_sources.length > 0)
+                            ? metaState.selected_sources.join(', ')
+                            : t('common.na')
+                    })}
+                </span>
                 {metaState?.truncated_by_limit ? (
                     <span className="warn">{t('app.monthLimit', { limit: metaState.month_limit })}</span>
                 ) : null}
@@ -280,9 +362,12 @@ export default function App() {
                 consulateGroups={consulateGroups}
                 filters={filters}
                 refreshFromMonth={refreshFromMonth}
+                refreshSources={refreshSources}
+                availableRefreshSources={options.fetch_sources}
                 defaultRefreshMonths={frontendConfig.defaultRefreshMonths}
                 showConsulateGroups={frontendConfig.enableConsulateGroups}
                 onRefreshFromMonthChange={setRefreshFromMonth}
+                onRefreshSourcesChange={setRefreshSources}
                 onChange={onFilterChange}
                 onReset={() => setFilters(EMPTY_FILTERS)}
                 onRefresh={onRefresh}
@@ -296,6 +381,10 @@ export default function App() {
                 }}
             />
             {frontendConfig.enableSensitivity ? <SensitivityTable rows={sensitivity} /> : null}
+            <CohortTable rows={cohorts} />
+            <DistributionPanel rows={distribution} />
+            <ComparisonPanel data={comparison} />
+            <AnomalyTable rows={anomalies} />
             <CaseTable
                 rows={cases}
                 total={caseTotal}

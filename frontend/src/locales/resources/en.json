@@ -11,6 +11,7 @@
         "language": "Language",
         "sampleCount": "Samples: {{count}}",
         "fetchRange": "Fetch Range: {{earliest}} ~ {{latest}}",
+        "selectedSources": "Selected Sources: {{value}}",
         "monthLimit": "Month cap reached: {{limit}}",
         "noRefresh": "No refresh record",
         "updatedOnly": "Updated at: {{time}}",
@@ -21,8 +22,9 @@
     },
     "filter": {
         "title": "Filters",
-        "hint": "Multi-select supported. Hold Command for quick multi-select. Historical fetch is supported with a start month.",
+        "hint": "Multi-select supported. Hold Command for quick multi-select. Historical fetch is supported with a start month. For trend analysis, monthly_track is recommended.",
         "refreshFromMonth": "Fetch Start Month",
+        "refreshSources": "Refresh Sources",
         "refresh": "Refresh Data",
         "reset": "Reset Filters",
         "noChips": "No filters selected",
@@ -68,6 +70,44 @@
         "p90": "P90 (days)",
         "tailRatio": ">=90d Ratio"
     },
+    "cohort": {
+        "title": "Cohort Comparison (by Visa Type)",
+        "hint": "Compare maturity and durations across visa cohorts",
+        "cohort": "Cohort",
+        "total": "Total",
+        "finalized": "Finalized",
+        "pending": "Pending",
+        "maturity": "Maturity",
+        "median": "Median",
+        "p90": "P90",
+        "tail": ">=90d Ratio"
+    },
+    "distribution": {
+        "title": "Finalized Duration Distribution",
+        "hint": "Inspect concentration across duration buckets"
+    },
+    "comparison": {
+        "title": "Latest Month vs Baseline",
+        "hint": "Automatically compares latest month with the prior month",
+        "empty": "Not enough month data for comparison.",
+        "latestMonth": "Latest",
+        "baselineMonth": "Baseline",
+        "median": "Median",
+        "p90": "P90",
+        "pendingRatio": "Pending Ratio",
+        "delta": "Delta"
+    },
+    "anomaly": {
+        "title": "Anomaly Long-tail Cases",
+        "hint": "Defaults to waiting days >= 120",
+        "empty": "No anomaly long-tail cases detected.",
+        "case": "Case",
+        "visa": "Visa",
+        "consulate": "Consulate",
+        "status": "Status",
+        "days": "Days",
+        "reason": "Reason"
+    },
     "cases": {
         "title": "Case Details",
         "summary": "Showing {{count}} / {{total}}",
@@ -97,6 +137,10 @@
         "cases": "Case details load failed: {{message}}",
         "options": "Filter options load failed: {{message}}",
         "groups": "Consulate groups load failed: {{message}}",
+        "cohorts": "Cohort stats load failed: {{message}}",
+        "distribution": "Distribution stats load failed: {{message}}",
+        "comparison": "Comparison load failed: {{message}}",
+        "anomalies": "Anomaly detection load failed: {{message}}",
         "refresh": "Refresh failed: {{message}}"
     }
 }

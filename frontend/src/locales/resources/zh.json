@@ -11,6 +11,7 @@
         "language": "语言",
         "sampleCount": "样本数: {{count}}",
         "fetchRange": "抓取范围: {{earliest}} ~ {{latest}}",
+        "selectedSources": "已用来源: {{value}}",
         "monthLimit": "已触发月份上限: {{limit}}",
         "noRefresh": "尚无刷新记录",
         "updatedOnly": "更新时间: {{time}}",
@@ -21,8 +22,9 @@
     },
     "filter": {
         "title": "筛选条件",
-        "hint": "可多选；按住 Command 可快速多选。支持按起始月份向前抓取更多历史数据。",
+        "hint": "可多选；按住 Command 可快速多选。支持按起始月份向前抓取更多历史数据。趋势分析建议优先使用 monthly_track 来源。",
         "refreshFromMonth": "抓取起始月份",
+        "refreshSources": "刷新数据来源",
         "refresh": "刷新数据",
         "reset": "重置筛选",
         "noChips": "当前无筛选条件",
@@ -68,6 +70,44 @@
         "p90": "P90 (days)",
         "tailRatio": ">=90d Ratio"
     },
+    "cohort": {
+        "title": "分群对比（按签证类型）",
+        "hint": "用于观察不同签证类型的成熟度与时长差异",
+        "cohort": "分群",
+        "total": "总样本",
+        "finalized": "结案",
+        "pending": "Pending",
+        "maturity": "成熟度",
+        "median": "中位数",
+        "p90": "P90",
+        "tail": ">=90天占比"
+    },
+    "distribution": {
+        "title": "结案时长分布",
+        "hint": "观察不同时间桶中的案例集中度"
+    },
+    "comparison": {
+        "title": "最新月 vs 基线月",
+        "hint": "自动对比最新有数据月份与前一月份",
+        "empty": "有效月份不足，暂无法对比。",
+        "latestMonth": "最新月",
+        "baselineMonth": "基线月",
+        "median": "中位数",
+        "p90": "P90",
+        "pendingRatio": "Pending比率",
+        "delta": "变化"
+    },
+    "anomaly": {
+        "title": "异常长尾案例",
+        "hint": "默认筛选等待天数>=120的案例",
+        "empty": "未检测到异常长尾案例。",
+        "case": "Case",
+        "visa": "Visa",
+        "consulate": "Consulate",
+        "status": "Status",
+        "days": "天数",
+        "reason": "原因"
+    },
     "cases": {
         "title": "案例明细",
         "summary": "当前返回 {{count}} / {{total}}",
@@ -97,6 +137,10 @@
         "cases": "案例明细加载失败: {{message}}",
         "options": "筛选项加载失败: {{message}}",
         "groups": "领馆分组加载失败: {{message}}",
+        "cohorts": "分群统计加载失败: {{message}}",
+        "distribution": "分布统计加载失败: {{message}}",
+        "comparison": "月份对比加载失败: {{message}}",
+        "anomalies": "异常检测加载失败: {{message}}",
         "refresh": "刷新失败: {{message}}"
     }
 }

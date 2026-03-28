@@ -239,6 +239,148 @@ def sensitivity_stats(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
     ]
 
 
+def cohort_stats(rows: list[dict[str, str]], key_field: str = "visa_type") -> list[dict[str, Any]]:
+    groups: dict[str, list[dict[str, str]]] = {}
+    for row in rows:
+        key = str(row.get(key_field) or "Unknown").strip() or "Unknown"
+        groups.setdefault(key, []).append(row)
+
+    result: list[dict[str, Any]] = []
+    for key in sorted(groups.keys()):
+        bucket = groups[key]
+        total_n = len(bucket)
+        finalized_days = [
+            value
+            for value in (_to_int(item.get("waiting_days_calc")) for item in bucket if _is_finalized(item))
+            if value is not None
+        ]
+        finalized_n = len(finalized_days)
+        pending_n = sum(1 for item in bucket if not _is_finalized(item))
+        s = stats(finalized_days)
+        tail_n = sum(1 for value in finalized_days if value >= 90)
+
+        result.append(
+            {
+                "cohort": key,
+                "total_cases": total_n,
+                "finalized_cases": finalized_n,
+                "pending_cases": pending_n,
+                "maturity_ratio": round(finalized_n / total_n, 4) if total_n else 0.0,
+                "median_days": round(s["median"], 2) if finalized_n else None,
+                "p90_days": round(s["p90"], 2) if finalized_n else None,
+                "long_tail_90plus_ratio": round(tail_n / finalized_n, 4) if finalized_n else None,
+            }
+        )
+
+    return result
+
+
+def distribution_stats(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+    finalized_days = [
+        value
+        for value in (_to_int(row.get("waiting_days_calc")) for row in rows if _is_finalized(row))
+        if value is not None
+    ]
+    total = len(finalized_days)
+    ranges: list[tuple[str, int, int | None]] = [
+        ("0-30", 0, 30),
+        ("31-60", 31, 60),
+        ("61-90", 61, 90),
+        ("91-120", 91, 120),
+        ("120+", 121, None),
+    ]
+
+    items: list[dict[str, Any]] = []
+    for label, lower, upper in ranges:
+        if upper is None:
+            count = sum(1 for value in finalized_days if value >= lower)
+        else:
+            count = sum(1 for value in finalized_days if lower <= value <= upper)
+        items.append(
+            {
+                "bucket": label,
+                "count": count,
+                "ratio": round(count / total, 4) if total else 0.0,
+            }
+        )
+    return items
+
+
+def comparison_stats(rows: list[dict[str, str]]) -> dict[str, Any]:
+    month_rows: dict[str, list[dict[str, str]]] = {}
+    for row in rows:
+        month = (row.get("check_date") or "")[:7]
+        if month:
+            month_rows.setdefault(month, []).append(row)
+
+    ordered_months = sorted(month_rows.keys(), reverse=True)
+    if len(ordered_months) < 2:
+        return {
+            "latest_month": ordered_months[0] if ordered_months else None,
+            "baseline_month": None,
+            "latest": None,
+            "baseline": None,
+            "delta": None,
+        }
+
+    latest_month = ordered_months[0]
+    baseline_month = ordered_months[1]
+
+    def metrics(month: str) -> dict[str, float]:
+        rows_in_month = month_rows[month]
+        overview = overview_stats(rows_in_month)
+        return {
+            "median_days": overview["median_days"],
+            "p90_days": overview["p90_days"],
+            "pending_ratio": round(
+                overview["pending_cases"] / overview["total_cases"],
+                4,
+            )
+            if overview["total_cases"]
+            else 0.0,
+        }
+
+    latest = metrics(latest_month)
+    baseline = metrics(baseline_month)
+    return {
+        "latest_month": latest_month,
+        "baseline_month": baseline_month,
+        "latest": latest,
+        "baseline": baseline,
+        "delta": {
+            "median_days": round(latest["median_days"] - baseline["median_days"], 2),
+            "p90_days": round(latest["p90_days"] - baseline["p90_days"], 2),
+            "pending_ratio": round(latest["pending_ratio"] - baseline["pending_ratio"], 4),
+        },
+    }
+
+
+def anomalies(rows: list[dict[str, str]], threshold_days: int = 120, limit: int = 50) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        finalized = _is_finalized(row)
+        duration = _to_int(row.get("waiting_days_calc" if finalized else "observed_days"))
+        if duration is None or duration < threshold_days:
+            continue
+
+        result.append(
+            {
+                "case_number": row.get("case_number") or "",
+                "visa_type": row.get("visa_type") or "",
+                "consulate": row.get("consulate") or "",
+                "status": row.get("status") or "",
+                "check_date": row.get("check_date") or "",
+                "days": duration,
+                "reason": "finalized_long_wait" if finalized else "pending_long_wait",
+                "detail_url": row.get("detail_url") or "",
+                "update_url": row.get("update_url") or "",
+            }
+        )
+
+    result.sort(key=lambda item: int(item["days"]), reverse=True)
+    return result[: max(1, limit)]
+
+
 def options(rows: list[dict[str, str]]) -> dict[str, list[str]]:
     months = sorted({(r.get("check_date") or "")[:7] for r in rows if r.get("check_date")}, reverse=True)
     visa_types = sorted({(r.get("visa_type") or "").upper() for r in rows if r.get("visa_type")})
