@@ -14,6 +14,10 @@
     --glass-blur-full: 18px;
     --glass-blur-lite: 8px;
     --hero-text-shadow: 0 2px 14px rgba(8, 24, 38, 0.34);
+    --motion-fast: 180ms;
+    --motion-base: 360ms;
+    --motion-stagger: 80ms;
+    --motion-emphasis: cubic-bezier(0.21, 1, 0.32, 1);
 }
 
 * {
@@ -257,6 +261,19 @@ body {
     .app-shell.glass-tier-full .lang-switch select {
         transition: none;
         transform: none;
+    }
+
+    .filter-card.motion-ready .filter-motion-item {
+        animation: none;
+        opacity: 1;
+    }
+
+    .filter-zone,
+    .filter-card .field,
+    .filter-card .checkbox-item,
+    .filter-card .source-option,
+    .chip {
+        transition: none;
     }
 }
 
@@ -647,6 +664,49 @@ body {
     font-size: 13px;
 }
 
+@keyframes filter-rise-in {
+    0% {
+        opacity: 0;
+        transform: translate3d(0, 14px, 0) scale(0.985);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+}
+
+.filter-card.motion-ready .filter-motion-item {
+    opacity: 0;
+    animation: filter-rise-in 620ms var(--motion-emphasis) forwards;
+    animation-delay: calc(var(--motion-order, 0) * var(--motion-stagger));
+    will-change: transform, opacity;
+}
+
+.filter-card .motion-0 {
+    --motion-order: 0;
+}
+
+.filter-card .motion-1 {
+    --motion-order: 1;
+}
+
+.filter-card .motion-2 {
+    --motion-order: 2;
+}
+
+.filter-card .motion-3 {
+    --motion-order: 3;
+}
+
+.filter-card .motion-4 {
+    --motion-order: 4;
+}
+
+.filter-card .motion-5 {
+    --motion-order: 5;
+}
+
 .filter-card {
     border-radius: 22px;
     padding: 18px;
@@ -734,6 +794,12 @@ body {
     border: 1px solid rgba(174, 198, 217, 0.72);
     background: rgba(255, 255, 255, 0.74);
     padding: 12px;
+    transition: transform var(--motion-fast) var(--motion-emphasis), box-shadow var(--motion-fast) ease;
+}
+
+.filter-zone:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 22px rgba(34, 73, 103, 0.12);
 }
 
 .filter-zone-head {
@@ -780,6 +846,13 @@ body {
 .filter-card .field {
     padding: 10px;
     background: rgba(255, 255, 255, 0.82);
+    transition: transform var(--motion-fast) ease, box-shadow var(--motion-fast) ease, border-color var(--motion-fast) ease;
+}
+
+.filter-card .field:focus-within {
+    transform: translateY(-1px);
+    border-color: rgba(120, 166, 198, 0.9);
+    box-shadow: 0 8px 18px rgba(27, 79, 118, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
 .filter-card .field span {
@@ -822,11 +895,12 @@ body {
 .filter-card .checkbox-item {
     border-radius: 10px;
     padding: 4px 6px;
-    transition: background 0.2s ease;
+    transition: background var(--motion-fast) ease, transform var(--motion-fast) ease;
 }
 
 .filter-card .checkbox-item:hover {
     background: rgba(236, 245, 251, 0.8);
+    transform: translateX(2px);
 }
 
 .filter-card .refresh-sources-panel {
@@ -843,6 +917,13 @@ body {
     padding: 6px 8px;
     border: 1px solid rgba(198, 215, 228, 0.72);
     background: rgba(255, 255, 255, 0.72);
+    transition: border-color var(--motion-fast) ease, transform var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
+}
+
+.filter-card .source-option:hover {
+    transform: translateY(-1px);
+    border-color: rgba(147, 186, 214, 0.9);
+    box-shadow: 0 6px 14px rgba(35, 82, 116, 0.1);
 }
 
 .filter-card .quick-actions {
@@ -868,6 +949,12 @@ body {
     padding: 6px 10px;
     border-radius: 999px;
     font-weight: 500;
+    transition: transform var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
+}
+
+.chip:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 10px rgba(28, 76, 108, 0.12);
 }
 
 .chip.empty {
@@ -1285,7 +1372,34 @@ thead {
     }
 
     .filter-zones {
-        grid-template-columns: 1fr;
+        display: flex;
+        overflow-x: auto;
+        padding: 2px 2px 8px;
+        gap: 12px;
+        scroll-snap-type: x mandatory;
+        scroll-padding-inline: 2px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .filter-zones::-webkit-scrollbar {
+        height: 8px;
+    }
+
+    .filter-zones::-webkit-scrollbar-track {
+        background: rgba(223, 235, 244, 0.7);
+        border-radius: 999px;
+    }
+
+    .filter-zones::-webkit-scrollbar-thumb {
+        background: rgba(111, 153, 181, 0.75);
+        border-radius: 999px;
+    }
+
+    .filter-zone {
+        flex: 0 0 min(86vw, 440px);
+        min-width: 280px;
+        scroll-snap-align: start;
+        scroll-snap-stop: always;
     }
 
     .field-inline,
@@ -1363,6 +1477,11 @@ thead {
 
     .refresh-actions {
         grid-template-columns: 1fr;
+    }
+
+    .filter-zone {
+        flex-basis: 92vw;
+        min-width: 250px;
     }
 
     .filter-card .quick-actions {

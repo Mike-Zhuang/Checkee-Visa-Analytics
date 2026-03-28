@@ -218,8 +218,8 @@ export default function FilterBar({
     }
 
     return (
-        <section className="filter-card" role="region" aria-labelledby="filters-title">
-            <div className="filter-top">
+        <section className="filter-card motion-ready" role="region" aria-labelledby="filters-title">
+            <div className="filter-top filter-motion-item motion-0">
                 <h3 id="filters-title">{titleText}</h3>
                 <div className="hint-list" id="filters-hint">
                     <p>{t('filter.hintSelect')}</p>
@@ -229,7 +229,7 @@ export default function FilterBar({
             </div>
 
             {showRefreshControls ? (
-                <div className="refresh-shell">
+                <div className="refresh-shell filter-motion-item motion-1">
                     <div className="refresh-row">
                         <label className="field field-inline" htmlFor="refresh-from-month">
                             <span>{t('filter.refreshFromMonth')}</span>
@@ -291,12 +291,12 @@ export default function FilterBar({
                     ) : null}
                 </div>
             ) : (
-                <div className="actions compact filter-only-actions">
+                <div className="actions compact filter-only-actions filter-motion-item motion-1">
                     <button type="button" className="ghost" onClick={onReset}>{t('filter.reset')}</button>
                 </div>
             )}
 
-            <div className="filter-search-card">
+            <div className="filter-search-card filter-motion-item motion-2">
                 <label className="field" htmlFor="filter-search-text">
                     <span id="filter-search-text-label">{t('filter.searchText')}</span>
                     <input
@@ -311,7 +311,7 @@ export default function FilterBar({
                 </label>
             </div>
 
-            <div className="chip-row" aria-live="polite">
+            <div className="chip-row filter-motion-item motion-3" aria-live="polite">
                 {chips.length === 0 ? <span className="chip empty" role="status">{t('filter.noChips')}</span> : null}
                 {chips.map((chip) => (
                     <button
@@ -327,7 +327,7 @@ export default function FilterBar({
                 ))}
             </div>
 
-            <div className="filter-zones">
+            <div className="filter-zones filter-motion-item motion-4">
                 <section className="filter-zone" aria-label={t('filter.coreFiltersTitle')}>
                     <div className="filter-zone-head">
                         <h4>{t('filter.coreFiltersTitle')}</h4>
@@ -443,7 +443,7 @@ export default function FilterBar({
             </div>
 
             {showConsulateGroups ? (
-                <div className="consulate-section">
+                <div className="consulate-section filter-motion-item motion-5">
                     <h4>{t('filter.groupedConsulates')}</h4>
                     <div className="consulate-visa-block">
                         <p className="consulate-subtitle">{t('filter.visaPrefilterTitle')}</p>
