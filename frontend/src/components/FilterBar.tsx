@@ -10,6 +10,8 @@ type Props = {
     availableRefreshSources: string[]
     defaultRefreshMonths: number
     showConsulateGroups: boolean
+    isRefreshing: boolean
+    refreshFeedback: { kind: 'success' | 'error'; message: string } | null
     onRefreshFromMonthChange: (value: string) => void
     onRefreshSourcesChange: (value: string[]) => void
     onChange: (next: Filters) => void
@@ -20,12 +22,14 @@ type Props = {
 function MultiSelect({
     id,
     label,
+    hint,
     values,
     selected,
     onPick
 }: {
     id: string
     label: string
+    hint?: string
     values: string[]
     selected: string[]
     onPick: (v: string[]) => void
@@ -47,7 +51,61 @@ function MultiSelect({
                     <option key={v} value={v}>{v}</option>
                 ))}
             </select>
+            {hint ? <small className="field-help">{hint}</small> : null}
         </label>
+    )
+}
+
+function CheckboxGroup({
+    title,
+    hint,
+    values,
+    selected,
+    onPick,
+    onClear,
+    clearText
+}: {
+    title: string
+    hint?: string
+    values: string[]
+    selected: string[]
+    onPick: (v: string[]) => void
+    onClear?: () => void
+    clearText?: string
+}) {
+    return (
+        <div className="field checkbox-group">
+            <div className="checkbox-group-head">
+                <span>{title}</span>
+                {onClear ? (
+                    <button type="button" className="ghost mini" onClick={onClear} disabled={selected.length === 0}>
+                        {clearText ?? 'Clear'}
+                    </button>
+                ) : null}
+            </div>
+            <div className="checkbox-list">
+                {values.map((value) => {
+                    const checked = selected.includes(value)
+                    return (
+                        <label key={value} className="checkbox-item">
+                            <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => {
+                                    if (checked) {
+                                        onPick(selected.filter((item) => item !== value))
+                                    } else {
+                                        onPick([...selected, value])
+                                    }
+                                }}
+                            />
+                            <span>{value}</span>
+                        </label>
+                    )
+                })}
+            </div>
+            {hint ? <small className="field-help">{hint}</small> : null}
+        </div>
     )
 }
 
@@ -67,6 +125,8 @@ export default function FilterBar({
     availableRefreshSources,
     defaultRefreshMonths,
     showConsulateGroups,
+    isRefreshing,
+    refreshFeedback,
     onRefreshFromMonthChange,
     onRefreshSourcesChange,
     onChange,
@@ -74,6 +134,28 @@ export default function FilterBar({
     onRefresh
 }: Props) {
     const { t } = useTranslation()
+
+    const sourceMeta = availableRefreshSources.map((source) => {
+        if (source === 'monthly_track') {
+            return {
+                key: source,
+                label: t('filter.sourceMonthlyLabel'),
+                desc: t('filter.sourceMonthlyDesc')
+            }
+        }
+        if (source === 'latest_snapshot') {
+            return {
+                key: source,
+                label: t('filter.sourceLatestLabel'),
+                desc: t('filter.sourceLatestDesc')
+            }
+        }
+        return {
+            key: source,
+            label: source,
+            desc: t('filter.sourceUnknownDesc')
+        }
+    })
 
     const chips = [
         ...filters.visa_types.map((v) => ({ field: 'visa_types' as const, value: v, label: t('filter.chipVisa', { value: v }) })),
@@ -101,10 +183,28 @@ export default function FilterBar({
         onChange({ ...filters, consulates: Array.from(merged) })
     }
 
+    const clearConsulateGroup = (group: ConsulateGroup) => {
+        onChange({
+            ...filters,
+            consulates: filters.consulates.filter((city) => !group.consulates.includes(city))
+        })
+    }
+
+    const toggleRefreshSource = (source: string) => {
+        const next = refreshSources.includes(source)
+            ? refreshSources.filter((item) => item !== source)
+            : [...refreshSources, source]
+        onRefreshSourcesChange(next)
+    }
+
     return (
         <section className="filter-card" role="region" aria-labelledby="filters-title">
             <h3 id="filters-title">{t('filter.title')}</h3>
-            <p className="hint" id="filters-hint">{t('filter.hint')}</p>
+            <div className="hint-list" id="filters-hint">
+                <p>{t('filter.hintSelect')}</p>
+                <p>{t('filter.hintEmptyMeansAll')}</p>
+                <p>{t('filter.hintHistory')}</p>
+            </div>
 
             <div className="refresh-row">
                 <label className="field field-inline" htmlFor="refresh-from-month">
@@ -114,29 +214,37 @@ export default function FilterBar({
                         type="month"
                         value={refreshFromMonth}
                         aria-describedby="filters-hint"
+                        disabled={isRefreshing}
                         onChange={(e) => onRefreshFromMonthChange(e.currentTarget.value)}
                     />
+                    <small className="field-help">
+                        {t('filter.refreshFromMonthHelp', { months: defaultRefreshMonths })}
+                    </small>
                 </label>
-                <label className="field field-inline" htmlFor="refresh-sources">
+
+                <fieldset className="refresh-sources-panel" aria-describedby="filters-hint">
                     <span>{t('filter.refreshSources')}</span>
-                    <select
-                        id="refresh-sources"
-                        multiple
-                        value={refreshSources}
-                        onChange={(e) => {
-                            const next = Array.from(e.currentTarget.selectedOptions).map((o) => o.value)
-                            onRefreshSourcesChange(next)
-                        }}
-                    >
-                        {availableRefreshSources.map((source) => (
-                            <option key={source} value={source}>{source}</option>
+                    <small className="field-help">{t('filter.refreshSourcesHelp')}</small>
+                    <div className="source-options">
+                        {sourceMeta.map((source) => (
+                            <label className="source-option" key={source.key}>
+                                <input
+                                    type="checkbox"
+                                    checked={refreshSources.includes(source.key)}
+                                    disabled={isRefreshing}
+                                    onChange={() => toggleRefreshSource(source.key)}
+                                />
+                                <span className="source-title">{source.label}</span>
+                                <small className="source-desc">{source.desc}</small>
+                            </label>
                         ))}
-                    </select>
-                </label>
+                    </div>
+                </fieldset>
+
                 <div className="actions compact">
                     <button
                         type="button"
-                        disabled={refreshSources.length === 0}
+                        disabled={isRefreshing || refreshSources.length === 0}
                         onClick={() =>
                             onRefresh({
                                 all_months: false,
@@ -146,11 +254,17 @@ export default function FilterBar({
                             })
                         }
                     >
-                        {t('filter.refresh')}
+                        {isRefreshing ? t('filter.refreshing') : t('filter.refresh')}
                     </button>
-                    <button type="button" className="ghost" onClick={onReset}>{t('filter.reset')}</button>
+                    <button type="button" className="ghost" disabled={isRefreshing} onClick={onReset}>{t('filter.reset')}</button>
                 </div>
             </div>
+
+            {refreshFeedback ? (
+                <div className={`refresh-feedback ${refreshFeedback.kind}`} role="status" aria-live="polite">
+                    {refreshFeedback.message}
+                </div>
+            ) : null}
 
             <div className="chip-row" aria-live="polite">
                 {chips.length === 0 ? <span className="chip empty" role="status">{t('filter.noChips')}</span> : null}
@@ -169,13 +283,17 @@ export default function FilterBar({
             </div>
 
             <div className="filter-grid">
-                <MultiSelect
-                    id="filter-visa-types"
-                    label={t('filter.visaTypes')}
-                    values={options.visa_types}
-                    selected={filters.visa_types}
-                    onPick={(v) => onChange({ ...filters, visa_types: v })}
-                />
+                {!showConsulateGroups ? (
+                    <CheckboxGroup
+                        title={t('filter.visaTypes')}
+                        hint={t('filter.visaTypesHint')}
+                        values={options.visa_types}
+                        selected={filters.visa_types}
+                        onPick={(v) => onChange({ ...filters, visa_types: v })}
+                        onClear={() => onChange({ ...filters, visa_types: [] })}
+                        clearText={t('filter.clearOne')}
+                    />
+                ) : null}
                 <label className="field" htmlFor="filter-months">
                     <span id="filter-months-label">{t('filter.months')}</span>
                     <select
@@ -197,28 +315,35 @@ export default function FilterBar({
                         <button type="button" className="ghost" onClick={() => applyRecentMonths(6)}>{t('filter.quick6')}</button>
                         <button type="button" className="ghost" onClick={() => applyRecentMonths(12)}>{t('filter.quick12')}</button>
                     </div>
+                    <small className="field-help">{t('filter.monthsHint')}</small>
                 </label>
-                <MultiSelect
-                    id="filter-statuses"
-                    label={t('filter.statuses')}
+                <CheckboxGroup
+                    title={t('filter.statuses')}
+                    hint={t('filter.statusesHint')}
                     values={options.statuses}
                     selected={filters.statuses}
                     onPick={(v) => onChange({ ...filters, statuses: v })}
+                    onClear={() => onChange({ ...filters, statuses: [] })}
+                    clearText={t('filter.clearOne')}
                 />
-                <MultiSelect
-                    id="filter-entries"
-                    label={t('filter.entries')}
+                <CheckboxGroup
+                    title={t('filter.entries')}
+                    hint={t('filter.entriesHint')}
                     values={options.entries}
                     selected={filters.entries}
                     onPick={(v) => onChange({ ...filters, entries: v })}
+                    onClear={() => onChange({ ...filters, entries: [] })}
+                    clearText={t('filter.clearOne')}
                 />
                 {!showConsulateGroups ? (
-                    <MultiSelect
-                        id="filter-consulates"
-                        label={t('filter.consulates')}
+                    <CheckboxGroup
+                        title={t('filter.consulates')}
+                        hint={t('filter.consulatesHint')}
                         values={options.consulates}
                         selected={filters.consulates}
                         onPick={(v) => onChange({ ...filters, consulates: v })}
+                        onClear={() => onChange({ ...filters, consulates: [] })}
+                        clearText={t('filter.clearOne')}
                     />
                 ) : null}
             </div>
@@ -226,14 +351,28 @@ export default function FilterBar({
             {showConsulateGroups ? (
                 <div className="consulate-section">
                     <h4>{t('filter.groupedConsulates')}</h4>
+                    <CheckboxGroup
+                        title={t('filter.visaTypes')}
+                        hint={t('filter.visaTypesHint')}
+                        values={options.visa_types}
+                        selected={filters.visa_types}
+                        onPick={(v) => onChange({ ...filters, visa_types: v })}
+                        onClear={() => onChange({ ...filters, visa_types: [] })}
+                        clearText={t('filter.clearOne')}
+                    />
                     <div className="consulate-groups">
                         {consulateGroups.map((group) => (
                             <fieldset className="consulate-group" key={group.key}>
                                 <div className="consulate-group-title">
-                                    <legend>{group.label}</legend>
-                                    <button type="button" className="ghost" onClick={() => toggleConsulateGroup(group)}>
-                                        {t('filter.toggleGroup')}
-                                    </button>
+                                    <legend>{t(`filter.groupName.${group.key}`, { defaultValue: group.label })}</legend>
+                                    <div className="consulate-group-actions">
+                                        <button type="button" className="ghost mini" onClick={() => toggleConsulateGroup(group)}>
+                                            {t('filter.toggleGroup')}
+                                        </button>
+                                        <button type="button" className="ghost mini" onClick={() => clearConsulateGroup(group)}>
+                                            {t('filter.clearGroup')}
+                                        </button>
+                                    </div>
                                 </div>
                                 <div className="consulate-items">
                                     {group.consulates.map((city) => (
