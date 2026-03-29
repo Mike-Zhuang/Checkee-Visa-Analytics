@@ -26,6 +26,7 @@ frontend/node_modules/
 frontend/dist/
 frontend/.vite/
 frontend/coverage/
+frontend/manual-checks/
 frontend/.pnpm-store/
 .pnpm-store/
 *.tsbuildinfo
