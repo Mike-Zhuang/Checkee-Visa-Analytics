@@ -127,3 +127,128 @@ def test_refresh_cooldown_returns_429(client, monkeypatch) -> None:
 
     state_payload = client.get("/api/v1/meta/state").json()
     assert state_payload["refresh_history"][0]["status"] == "blocked"
+
+
+def test_admin_stale_refresh_fresh_enough(client, monkeypatch) -> None:
+    from app.api import routes
+
+    monkeypatch.setattr(routes, "_require_admin_session", lambda request: datetime.now())
+    monkeypatch.setattr(
+        routes.service,
+        "get_meta",
+        lambda: {
+            "updated_at": "2026-03-29T10:00:00",
+            "data_freshness_seconds": 1800,
+        },
+    )
+
+    response = client.post("/api/v1/admin/refresh/stale-trigger")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["triggered"] is False
+    assert payload["reason"] == "fresh_enough"
+    assert payload["updated_at"] == "2026-03-29T10:00:00"
+
+
+def test_admin_stale_refresh_triggered(client, monkeypatch) -> None:
+    from app.api import routes
+
+    monkeypatch.setattr(routes, "_require_admin_session", lambda request: datetime.now())
+    meta_calls = [
+        {
+            "updated_at": "2026-03-28T10:00:00",
+            "data_freshness_seconds": 90000,
+            "selected_sources": ["monthly_track"],
+            "months_arg": 6,
+            "from_month": None,
+        },
+        {
+            "updated_at": "2026-03-29T10:30:00",
+            "data_freshness_seconds": 0,
+            "selected_sources": ["monthly_track"],
+            "months_arg": 6,
+            "from_month": None,
+        },
+    ]
+
+    monkeypatch.setattr(routes.service, "get_meta", lambda: meta_calls.pop(0))
+    monkeypatch.setattr(
+        routes.service,
+        "refresh",
+        lambda *, all_months, months, from_month, sources: {
+            "success": True,
+            "message": "refresh completed",
+            "fetched_months": ["2026-03"],
+            "total_cases": 123,
+            "selected_sources": sources,
+            "truncated_by_limit": False,
+            "month_limit": 120,
+            "generated_at": datetime.now(),
+        },
+    )
+
+    response = client.post("/api/v1/admin/refresh/stale-trigger")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["triggered"] is True
+    assert payload["reason"] == "stale_triggered"
+    assert payload["updated_at"] == "2026-03-29T10:30:00"
+
+
+def test_admin_stale_refresh_cooldown(client, monkeypatch) -> None:
+    from app.api import routes
+    from app.services.data_service import RefreshRateLimitError
+
+    monkeypatch.setattr(routes, "_require_admin_session", lambda request: datetime.now())
+    monkeypatch.setattr(
+        routes.service,
+        "get_meta",
+        lambda: {
+            "updated_at": "2026-03-29T10:00:00",
+            "data_freshness_seconds": 90000,
+            "selected_sources": ["monthly_track"],
+            "months_arg": 6,
+            "from_month": None,
+        },
+    )
+
+    def fake_refresh(*, all_months: bool, months: int, from_month: str | None, sources: list[str] | None):
+        raise RefreshRateLimitError(123)
+
+    monkeypatch.setattr(routes.service, "refresh", fake_refresh)
+
+    response = client.post("/api/v1/admin/refresh/stale-trigger")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["triggered"] is False
+    assert payload["reason"] == "cooldown"
+    assert "123s" in payload["message"]
+
+
+def test_admin_stale_refresh_error(client, monkeypatch) -> None:
+    from app.api import routes
+
+    monkeypatch.setattr(routes, "_require_admin_session", lambda request: datetime.now())
+    monkeypatch.setattr(
+        routes.service,
+        "get_meta",
+        lambda: {
+            "updated_at": "2026-03-29T10:00:00",
+            "data_freshness_seconds": 90000,
+            "selected_sources": ["monthly_track"],
+            "months_arg": 6,
+            "from_month": None,
+        },
+    )
+
+    def fake_refresh(*, all_months: bool, months: int, from_month: str | None, sources: list[str] | None):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(routes.service, "refresh", fake_refresh)
+
+    response = client.post("/api/v1/admin/refresh/stale-trigger")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["triggered"] is False
+    assert payload["reason"] == "error"
+    assert payload["message"] == "boom"

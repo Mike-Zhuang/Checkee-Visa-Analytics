@@ -10,6 +10,7 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 from app.core.config import (
     ADMIN_REFRESH_KEY,
     ADMIN_SESSION_TTL_SECONDS,
+    API_DEFAULT_REFRESH_MONTHS,
     API_DEFAULT_CASES_LIMIT,
     API_MAX_CASES_LIMIT,
     REFRESH_REQUIRE_ADMIN_KEY,
@@ -17,6 +18,7 @@ from app.core.config import (
 from app.core.schemas import (
     AdminLoginRequest,
     AdminLogoutResponse,
+    AdminStaleRefreshResponse,
     MajorClassificationsResponse,
     MajorOverrideMutationResponse,
     MajorOverrideUpsertRequest,
@@ -38,6 +40,7 @@ from app.services.scraper import list_supported_sources
 from app.services.admin_auth import create_admin_session, get_session_expiry, revoke_admin_session
 
 router = APIRouter(prefix="/api/v1", tags=["checkee"])
+ADMIN_STALE_REFRESH_THRESHOLD_SECONDS = 6 * 60 * 60
 
 
 def _split_csv_values(raw: str | None, upper: bool = False) -> set[str] | None:
@@ -166,6 +169,92 @@ def admin_logout(request: Request) -> AdminLogoutResponse:
         raise HTTPException(status_code=401, detail="admin session invalid or expired")
     revoke_admin_session(token)
     return AdminLogoutResponse(success=True, message="logout success")
+
+
+def _refresh_sources_from_meta(meta: dict) -> list[str]:
+    selected_sources = meta.get("selected_sources")
+    if isinstance(selected_sources, list):
+        normalized = [str(item).strip() for item in selected_sources if str(item).strip()]
+        if normalized:
+            return normalized
+
+    supported_sources = meta.get("supported_sources")
+    if isinstance(supported_sources, list):
+        normalized = [str(item).strip() for item in supported_sources if str(item).strip()]
+        if normalized:
+            return normalized
+
+    return ["monthly_track"]
+
+
+def _refresh_months_from_meta(meta: dict) -> int:
+    raw_months = meta.get("months_arg", API_DEFAULT_REFRESH_MONTHS)
+    try:
+        parsed = int(raw_months)
+    except (TypeError, ValueError):
+        return API_DEFAULT_REFRESH_MONTHS
+    return max(1, parsed)
+
+
+@router.post("/admin/refresh/stale-trigger", response_model=AdminStaleRefreshResponse)
+def admin_refresh_stale_trigger(request: Request) -> AdminStaleRefreshResponse:
+    _require_admin_session(request)
+
+    meta = service.get_meta()
+    updated_at = str(meta.get("updated_at") or "") or None
+    freshness_seconds = meta.get("data_freshness_seconds")
+
+    if isinstance(freshness_seconds, int) and freshness_seconds < ADMIN_STALE_REFRESH_THRESHOLD_SECONDS:
+        return AdminStaleRefreshResponse(
+            triggered=False,
+            reason="fresh_enough",
+            updated_at=updated_at,
+            message="data is fresh enough",
+        )
+
+    sources = _refresh_sources_from_meta(meta)
+    months = _refresh_months_from_meta(meta)
+    from_month_raw = meta.get("from_month")
+    from_month = str(from_month_raw).strip() if from_month_raw else None
+
+    try:
+        service.refresh(
+            all_months=False,
+            months=months,
+            from_month=from_month,
+            sources=sources,
+        )
+        refreshed_meta = service.get_meta()
+        refreshed_updated_at = str(refreshed_meta.get("updated_at") or "") or None
+        return AdminStaleRefreshResponse(
+            triggered=True,
+            reason="stale_triggered",
+            updated_at=refreshed_updated_at,
+            message="stale refresh triggered",
+        )
+    except RefreshRateLimitError as exc:
+        current_meta = service.get_meta()
+        current_updated_at = str(current_meta.get("updated_at") or "") or None
+        return AdminStaleRefreshResponse(
+            triggered=False,
+            reason="cooldown",
+            updated_at=current_updated_at,
+            message=f"refresh cooldown in effect, retry in {exc.retry_after_seconds}s",
+        )
+    except Exception as exc:  # noqa: BLE001
+        service.record_refresh_event(
+            status="error",
+            message=f"admin stale refresh failed: {exc}",
+            triggered_by="manual",
+        )
+        current_meta = service.get_meta()
+        current_updated_at = str(current_meta.get("updated_at") or "") or None
+        return AdminStaleRefreshResponse(
+            triggered=False,
+            reason="error",
+            updated_at=current_updated_at,
+            message=str(exc),
+        )
 
 
 @router.get("/admin/major-classifications", response_model=MajorClassificationsResponse)

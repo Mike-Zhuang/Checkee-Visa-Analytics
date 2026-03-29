@@ -13,7 +13,8 @@ const apiMock = vi.hoisted(() => ({
     saveAdminMajorOverrides: vi.fn(),
     deleteAdminMajorOverride: vi.fn(),
     logoutAdmin: vi.fn(),
-    refreshDataWithSession: vi.fn()
+    refreshDataWithSession: vi.fn(),
+    triggerAdminStaleRefresh: vi.fn()
 }))
 
 vi.mock('../api', () => ({
@@ -25,7 +26,8 @@ vi.mock('../api', () => ({
     saveAdminMajorOverrides: apiMock.saveAdminMajorOverrides,
     deleteAdminMajorOverride: apiMock.deleteAdminMajorOverride,
     logoutAdmin: apiMock.logoutAdmin,
-    refreshDataWithSession: apiMock.refreshDataWithSession
+    refreshDataWithSession: apiMock.refreshDataWithSession,
+    triggerAdminStaleRefresh: apiMock.triggerAdminStaleRefresh
 }))
 
 describe('AdminPage', () => {
@@ -138,6 +140,12 @@ describe('AdminPage', () => {
         apiMock.deleteAdminMajorOverride.mockResolvedValue(undefined)
         apiMock.logoutAdmin.mockResolvedValue(undefined)
         apiMock.refreshDataWithSession.mockResolvedValue(undefined)
+        apiMock.triggerAdminStaleRefresh.mockResolvedValue({
+            triggered: false,
+            reason: 'fresh_enough',
+            updated_at: '2026-03-28T15:20:00Z',
+            message: 'data is fresh enough'
+        })
     })
 
     it('应显示管理员登录入口', async () => {
@@ -174,6 +182,7 @@ describe('AdminPage', () => {
             expect(apiMock.loginAdmin).toHaveBeenCalledWith('Zcb070920!')
             expect(apiMock.getAdminSession).toHaveBeenCalledWith('session-token')
             expect(apiMock.getAdminMajorClassifications).toHaveBeenCalledWith('session-token', '', 600)
+            expect(apiMock.triggerAdminStaleRefresh).not.toHaveBeenCalled()
         })
 
         const expiryHint = screen.getByText(/会话有效期至：/)
@@ -213,5 +222,57 @@ describe('AdminPage', () => {
         expect(within(naRow).getByRole('button', { name: '保存' })).toBeDisabled()
         expect(within(naRow).getByRole('button', { name: '重置' })).toBeDisabled()
         expect(within(naRow).getByRole('button', { name: '删除覆盖' })).toBeDisabled()
+    })
+
+    it('数据过旧时应触发管理员兜底刷新', async () => {
+        const user = userEvent.setup()
+        apiMock.getMetaState.mockResolvedValue({
+            fetched_months: ['2026-03'],
+            fetched_month_count: 1,
+            total_cases: 100,
+            all_months: false,
+            months_arg: 6,
+            from_month: null,
+            truncated_by_limit: false,
+            month_limit: 120,
+            updated_at: '2026-03-28T00:00:00Z',
+            has_data: true,
+            current_case_count: 100,
+            data_freshness_seconds: 99999,
+            refresh_min_interval_seconds: 300,
+            refresh_available_in_seconds: 0,
+            refresh_history: [],
+            fetched_month_range: {
+                latest: '2026-03',
+                earliest: '2026-03'
+            },
+            selected_sources: ['monthly_track'],
+            supported_sources: ['monthly_track']
+        })
+        apiMock.loginAdmin.mockResolvedValue({
+            token: 'session-token',
+            expires_at: '2026-03-28T15:58:21.837314Z'
+        })
+        apiMock.triggerAdminStaleRefresh.mockResolvedValue({
+            triggered: true,
+            reason: 'stale_triggered',
+            updated_at: '2026-03-29T12:00:00Z',
+            message: 'stale refresh triggered'
+        })
+
+        render(<AdminPage />)
+
+        await waitFor(() => {
+            expect(apiMock.getOptions).toHaveBeenCalledTimes(1)
+            expect(apiMock.getMetaState).toHaveBeenCalledTimes(1)
+        })
+
+        await user.type(screen.getByPlaceholderText('请输入管理员密码'), 'Zcb070920!')
+        await user.click(screen.getByRole('button', { name: '登录' }))
+
+        await waitFor(() => {
+            expect(apiMock.triggerAdminStaleRefresh).toHaveBeenCalledWith('session-token')
+            expect(screen.getByText(/检测到数据过旧，已触发兜底刷新/)).toBeInTheDocument()
+        })
     })
 })

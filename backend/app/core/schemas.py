@@ -34,6 +34,13 @@ class AdminLogoutResponse(BaseModel):
     message: str
 
 
+class AdminStaleRefreshResponse(BaseModel):
+    triggered: bool
+    reason: Literal["stale_triggered", "fresh_enough", "cooldown", "error"]
+    updated_at: str | None = None
+    message: str = ""
+
+
 class RefreshResponse(BaseModel):
     success: bool
     message: str

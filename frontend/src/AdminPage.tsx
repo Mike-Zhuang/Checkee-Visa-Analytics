@@ -10,7 +10,8 @@ import {
     loginAdmin,
     logoutAdmin,
     refreshDataWithSession,
-    saveAdminMajorOverrides
+    saveAdminMajorOverrides,
+    triggerAdminStaleRefresh
 } from './api'
 import { frontendConfig } from './config'
 import type { MajorClassificationItem, MetaState, OptionsResponse, RefreshHistoryItem, RefreshPayload } from './types'
@@ -30,6 +31,8 @@ const EMPTY_OPTIONS: OptionsResponse = {
     detail_states: [],
     fetch_sources: []
 }
+
+const ADMIN_STALE_REFRESH_THRESHOLD_SECONDS = 6 * 60 * 60
 
 type GlassTier = 'full' | 'lite'
 
@@ -141,7 +144,7 @@ export default function AdminPage() {
         return null
     }
 
-    const loadMetaAndOptions = async () => {
+    const loadMetaAndOptions = useCallback(async () => {
         setIsLoading(true)
         setLoadError(null)
 
@@ -176,7 +179,7 @@ export default function AdminPage() {
         }
 
         setIsLoading(false)
-    }
+    }, [t])
 
     const loadMajorClassifications = useCallback(
         async (token: string, query = '') => {
@@ -210,8 +213,7 @@ export default function AdminPage() {
 
     useEffect(() => {
         void loadMetaAndOptions()
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+    }, [loadMetaAndOptions])
 
     useEffect(() => {
         if (!adminToken.trim()) {
@@ -278,6 +280,44 @@ export default function AdminPage() {
             setIsRefreshing(false)
         }
     }
+
+    const runAdminStaleRefreshFallback = useCallback(async (token: string) => {
+        const latestMeta = await getMetaState()
+        setMetaState(latestMeta)
+
+        const freshnessSeconds = latestMeta.data_freshness_seconds
+        const isFreshEnough = typeof freshnessSeconds === 'number'
+            && freshnessSeconds < ADMIN_STALE_REFRESH_THRESHOLD_SECONDS
+
+        if (isFreshEnough) {
+            setFeedback({ kind: 'success', message: t('admin.autoRefreshSkipFresh') })
+            return
+        }
+
+        const fallbackResult = await triggerAdminStaleRefresh(token)
+
+        if (fallbackResult.reason === 'stale_triggered') {
+            await loadMetaAndOptions()
+            setFeedback({
+                kind: 'success',
+                message: t('admin.autoRefreshTriggered', { value: fallbackResult.updated_at ?? t('common.na') })
+            })
+            return
+        }
+
+        if (fallbackResult.reason === 'fresh_enough') {
+            setFeedback({ kind: 'success', message: t('admin.autoRefreshSkipFresh') })
+            return
+        }
+
+        if (fallbackResult.reason === 'cooldown') {
+            setFeedback({ kind: 'error', message: t('admin.autoRefreshSkipCooldown') })
+            return
+        }
+
+        const detail = fallbackResult.message ? `: ${fallbackResult.message}` : ''
+        setFeedback({ kind: 'error', message: `${t('admin.autoRefreshFailed')}${detail}` })
+    }, [loadMetaAndOptions, t])
 
     const onLogin = async () => {
         if (!adminPassword.trim()) {
@@ -463,6 +503,21 @@ export default function AdminPage() {
                 }
                 setSessionExpiresAt(session.expires_at)
                 setAuthError(null)
+
+                try {
+                    await runAdminStaleRefreshFallback(adminToken)
+                } catch (error) {
+                    if (cancelled) {
+                        return
+                    }
+                    const message = error instanceof Error ? error.message : t('admin.autoRefreshFailed')
+                    if (message.includes('401') || message.includes('403')) {
+                        clearAdminSession()
+                        setAuthError(t('admin.sessionExpired'))
+                        return
+                    }
+                    setFeedback({ kind: 'error', message: `${t('admin.autoRefreshFailed')}: ${message}` })
+                }
             } catch {
                 if (cancelled) {
                     return
@@ -477,7 +532,7 @@ export default function AdminPage() {
         return () => {
             cancelled = true
         }
-    }, [adminToken, clearAdminSession, t])
+    }, [adminToken, clearAdminSession, runAdminStaleRefreshFallback, t])
 
     const languageValue = i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'zh'
     const history = metaState?.refresh_history ?? []

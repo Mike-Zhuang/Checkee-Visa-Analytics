@@ -155,6 +155,13 @@ export type AdminSessionStateResponse = {
     expires_at: string
 }
 
+export type AdminStaleRefreshResponse = {
+    triggered: boolean
+    reason: 'stale_triggered' | 'fresh_enough' | 'cooldown' | 'error'
+    updated_at: string | null
+    message: string
+}
+
 export type CohortItem = {
     cohort: string
     total_cases: number

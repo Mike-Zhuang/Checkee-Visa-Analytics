@@ -1,6 +1,7 @@
 import type {
     AdminLoginResponse,
     MajorClassificationsResponse,
+    AdminStaleRefreshResponse,
     AdminSessionStateResponse,
     AnomalyItem,
     CaseItem,
@@ -135,6 +136,18 @@ export async function getAdminSession(adminToken: string): Promise<AdminSessionS
         throw new Error(`admin session failed: ${res.status}${detail ? ` ${detail}` : ''}`)
     }
     return await res.json() as AdminSessionStateResponse
+}
+
+export async function triggerAdminStaleRefresh(adminToken: string): Promise<AdminStaleRefreshResponse> {
+    const res = await fetch(`${API_BASE}/admin/refresh/stale-trigger`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken.trim()}` }
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`admin stale refresh failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as AdminStaleRefreshResponse
 }
 
 export async function logoutAdmin(adminToken: string): Promise<void> {

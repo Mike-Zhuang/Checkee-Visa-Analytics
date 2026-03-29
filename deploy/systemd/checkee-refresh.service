@@ -9,4 +9,6 @@ User=www-data
 Group=www-data
 WorkingDirectory=/opt/checkee/backend
 EnvironmentFile=/opt/checkee/deploy/env/backend.env
-ExecStart=/usr/bin/bash -lc '/usr/bin/curl --fail --silent --show-error -X POST http://127.0.0.1:8000/api/v1/tasks/refresh -H "Content-Type: application/json" -H "X-Admin-Key: ${CHECKEE_ADMIN_REFRESH_KEY}" --data "{\"all_months\":false,\"months\":6,\"sources\":[\"monthly_track\"]}"'
+ExecStart=/usr/bin/curl --fail --silent --show-error --max-time 900 -X POST http://127.0.0.1:8000/api/v1/tasks/refresh -H "Content-Type: application/json" -H "X-Admin-Key: ${CHECKEE_ADMIN_REFRESH_KEY}" --data-binary "{\"all_months\":false,\"months\":6,\"sources\":[\"monthly_track\"]}"
+StandardOutput=append:/www/wwwlogs/checkee-refresh.log
+StandardError=append:/www/wwwlogs/checkee-refresh.error.log
