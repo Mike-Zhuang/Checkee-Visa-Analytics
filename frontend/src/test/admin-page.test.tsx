@@ -224,6 +224,32 @@ describe('AdminPage', () => {
         expect(within(naRow).getByRole('button', { name: '删除覆盖' })).toBeDisabled()
     })
 
+    it('应保留移动端列隐藏所需 class 挂点', async () => {
+        const user = userEvent.setup()
+        apiMock.loginAdmin.mockResolvedValue({
+            token: 'session-token',
+            expires_at: '2026-03-28T15:58:21.837314Z'
+        })
+
+        render(<AdminPage />)
+
+        await waitFor(() => {
+            expect(apiMock.getOptions).toHaveBeenCalledTimes(1)
+            expect(apiMock.getMetaState).toHaveBeenCalledTimes(1)
+        })
+
+        await user.type(screen.getByPlaceholderText('请输入管理员密码'), 'Zcb070920!')
+        await user.click(screen.getByRole('button', { name: '登录' }))
+
+        await waitFor(() => {
+            expect(screen.getByRole('columnheader', { name: '自动归类' })).toBeInTheDocument()
+            expect(screen.getByRole('columnheader', { name: '来源' })).toBeInTheDocument()
+        })
+
+        expect(screen.getByRole('columnheader', { name: '自动归类' })).toHaveClass('admin-col-secondary')
+        expect(screen.getByRole('columnheader', { name: '来源' })).toHaveClass('admin-col-tertiary')
+    })
+
     it('数据过旧时应触发管理员兜底刷新', async () => {
         const user = userEvent.setup()
         apiMock.getMetaState.mockResolvedValue({

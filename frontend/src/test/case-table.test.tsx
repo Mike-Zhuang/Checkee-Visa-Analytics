@@ -67,4 +67,22 @@ describe('CaseTable', () => {
         await user.click(screen.getByRole('button', { name: '下一页' }))
         expect(onPageChange).toHaveBeenCalledWith(2)
     })
+
+    it('应保留移动端列隐藏所需 class 挂点', () => {
+        render(
+            <CaseTable
+                rows={rows}
+                total={1}
+                page={1}
+                pageSize={50}
+                onPageChange={vi.fn()}
+                onPageSizeChange={vi.fn()}
+            />
+        )
+
+        expect(screen.getByRole('columnheader', { name: '雇主' })).toHaveClass('case-col-optional')
+        expect(screen.getByRole('columnheader', { name: 'Entry' })).toHaveClass('case-col-tertiary')
+        expect(screen.getByText('Google').closest('td')).toHaveClass('case-col-optional')
+        expect(screen.getByText('I20').closest('td')).toHaveClass('case-col-tertiary')
+    })
 })

@@ -58,28 +58,28 @@ export default function CaseTable({ rows, total, page, pageSize, onPageChange, o
                     <caption>{t('cases.caption')}</caption>
                     <thead>
                         <tr>
-                            <th scope="col">{t('cases.case')}</th>
-                            <th scope="col">{t('cases.visa')}</th>
-                            <th scope="col">{t('cases.entry')}</th>
-                            <th scope="col">{t('cases.consulate')}</th>
-                            <th scope="col">{t('cases.major')}</th>
-                            <th scope="col">{t('cases.employer')}</th>
-                            <th scope="col">{t('cases.location')}</th>
-                            <th scope="col">{t('cases.status')}</th>
-                            <th scope="col">{t('cases.checkDate')}</th>
-                            <th scope="col">{t('cases.completeDate')}</th>
-                            <th scope="col">{t('cases.calcDays')}</th>
-                            <th scope="col">{t('cases.note')}</th>
+                            <th scope="col" className="case-col-case">{t('cases.case')}</th>
+                            <th scope="col" className="case-col-visa">{t('cases.visa')}</th>
+                            <th scope="col" className="case-col-entry case-col-tertiary">{t('cases.entry')}</th>
+                            <th scope="col" className="case-col-consulate">{t('cases.consulate')}</th>
+                            <th scope="col" className="case-col-major">{t('cases.major')}</th>
+                            <th scope="col" className="case-col-employer case-col-optional">{t('cases.employer')}</th>
+                            <th scope="col" className="case-col-location case-col-optional">{t('cases.location')}</th>
+                            <th scope="col" className="case-col-status">{t('cases.status')}</th>
+                            <th scope="col" className="case-col-check-date">{t('cases.checkDate')}</th>
+                            <th scope="col" className="case-col-complete-date case-col-optional">{t('cases.completeDate')}</th>
+                            <th scope="col" className="case-col-calc-days case-col-optional">{t('cases.calcDays')}</th>
+                            <th scope="col" className="case-col-note case-col-optional">{t('cases.note')}</th>
                         </tr>
                     </thead>
                     <tbody>
                         {rows.map((r) => (
                             <tr key={`${r.case_number}-${r.check_date}`}>
-                                <td>{r.nickname}</td>
-                                <td>{r.visa_type}</td>
-                                <td>{r.visa_entry}</td>
-                                <td>{r.consulate}</td>
-                                <td>
+                                <td className="case-col-case">{r.nickname}</td>
+                                <td className="case-col-visa">{r.visa_type}</td>
+                                <td className="case-col-entry case-col-tertiary">{r.visa_entry}</td>
+                                <td className="case-col-consulate">{r.consulate}</td>
+                                <td className="case-col-major">
                                     <div className="major-cell">
                                         <span className="major-primary">{r.major || '-'}</span>
                                         <small className="major-secondary">
@@ -92,13 +92,13 @@ export default function CaseTable({ rows, total, page, pageSize, onPageChange, o
                                         </small>
                                     </div>
                                 </td>
-                                <td>{r.detail_employer || '-'}</td>
-                                <td>{detailLocation(r.detail_city, r.detail_state)}</td>
-                                <td>{r.status}</td>
-                                <td>{r.check_date}</td>
-                                <td>{r.complete_date}</td>
-                                <td>{r.waiting_days_calc || r.observed_days}</td>
-                                <td title={r.detail_note || ''}>{compactNote(r.detail_note)}</td>
+                                <td className="case-col-employer case-col-optional">{r.detail_employer || '-'}</td>
+                                <td className="case-col-location case-col-optional">{detailLocation(r.detail_city, r.detail_state)}</td>
+                                <td className="case-col-status">{r.status}</td>
+                                <td className="case-col-check-date">{r.check_date}</td>
+                                <td className="case-col-complete-date case-col-optional">{r.complete_date}</td>
+                                <td className="case-col-calc-days case-col-optional">{r.waiting_days_calc || r.observed_days}</td>
+                                <td className="case-col-note case-col-optional" title={r.detail_note || ''}>{compactNote(r.detail_note)}</td>
                             </tr>
                         ))}
                     </tbody>

@@ -833,12 +833,12 @@ export default function AdminPage() {
                             <table>
                                 <thead>
                                     <tr>
-                                        <th scope="col">{t('admin.majorColumnMajor')}</th>
-                                        <th scope="col">{t('admin.majorColumnCount')}</th>
-                                        <th scope="col">{t('admin.majorColumnAuto')}</th>
-                                        <th scope="col">{t('admin.majorColumnManual')}</th>
-                                        <th scope="col">{t('admin.majorColumnSource')}</th>
-                                        <th scope="col">{t('admin.majorColumnActions')}</th>
+                                        <th scope="col" className="admin-col-major">{t('admin.majorColumnMajor')}</th>
+                                        <th scope="col" className="admin-col-count">{t('admin.majorColumnCount')}</th>
+                                        <th scope="col" className="admin-col-auto admin-col-secondary">{t('admin.majorColumnAuto')}</th>
+                                        <th scope="col" className="admin-col-manual">{t('admin.majorColumnManual')}</th>
+                                        <th scope="col" className="admin-col-source admin-col-tertiary">{t('admin.majorColumnSource')}</th>
+                                        <th scope="col" className="admin-col-actions">{t('admin.majorColumnActions')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -871,17 +871,17 @@ export default function AdminPage() {
 
                                                 rows.push(
                                                     <tr key={row.major_normalized} className={isReadonlyRow ? 'admin-major-row-readonly' : ''}>
-                                                        <td>
+                                                        <td className="admin-col-major">
                                                             <div className="admin-major-name">
                                                                 <strong>{row.major}</strong>
                                                                 <small>{row.major_normalized}</small>
                                                             </div>
                                                         </td>
-                                                        <td>{row.count}</td>
-                                                        <td>
+                                                        <td className="admin-col-count">{row.count}</td>
+                                                        <td className="admin-col-auto admin-col-secondary">
                                                             {row.auto_category_l1} / {row.auto_category_l2}
                                                         </td>
-                                                        <td>
+                                                        <td className="admin-col-manual">
                                                             <div className="admin-major-selects">
                                                                 <select
                                                                     className="select-modern"
@@ -905,10 +905,10 @@ export default function AdminPage() {
                                                                 </select>
                                                             </div>
                                                         </td>
-                                                        <td>
+                                                        <td className="admin-col-source admin-col-tertiary">
                                                             <span className={`admin-status status-${row.source}`}>{sourceTag(row.source)}</span>
                                                         </td>
-                                                        <td>
+                                                        <td className="admin-col-actions">
                                                             <div className="admin-major-actions">
                                                                 <button
                                                                     type="button"

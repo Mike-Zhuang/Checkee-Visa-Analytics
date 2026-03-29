@@ -1595,6 +1595,8 @@ button.mini {
     overflow: auto;
     border-radius: 10px;
     border: 1px solid var(--line);
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
 }
 
 .distribution-list {
@@ -1833,6 +1835,10 @@ thead {
     table {
         min-width: 960px;
     }
+
+    .admin-major-table-wrap table {
+        min-width: 900px;
+    }
 }
 
 @media (max-width: 560px) {
@@ -1907,7 +1913,82 @@ thead {
     }
 
     table {
-        min-width: 760px;
+        min-width: 680px;
+    }
+
+    .admin-major-table-wrap table {
+        min-width: 640px;
+    }
+
+    .case-col-optional,
+    .admin-col-secondary {
+        display: none;
+    }
+
+    th,
+    td {
+        padding: 7px 8px;
+        font-size: 12px;
+    }
+
+    .admin-major-selects select {
+        font-size: 11.5px;
+        padding: 6px 8px;
+    }
+
+    .admin-major-actions {
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .admin-major-actions button {
+        width: 100%;
+    }
+
+    .pagination {
+        gap: 6px;
+    }
+
+    .page-size {
+        width: 100%;
+        margin-left: 0;
+    }
+}
+
+@media (max-width: 420px) {
+    .hero {
+        padding: 14px 16px;
+        gap: 12px;
+    }
+
+    .hero h1 {
+        font-size: 22px;
+    }
+
+    .hero p {
+        font-size: 13px;
+    }
+
+    .filter-zone {
+        flex-basis: 94vw;
+        min-width: 220px;
+    }
+
+    .filter-card .quick-actions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    table {
+        min-width: 560px;
+    }
+
+    .admin-major-table-wrap table {
+        min-width: 540px;
+    }
+
+    .case-col-tertiary,
+    .admin-col-tertiary {
+        display: none;
     }
 }
 
