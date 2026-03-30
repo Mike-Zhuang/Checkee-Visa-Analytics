@@ -28,6 +28,19 @@ from app.core.config import (
 DEFAULT_FETCH_SOURCE = "monthly_track"
 LATEST_FETCH_SOURCE = "latest_snapshot"
 SUPPORTED_FETCH_SOURCES = frozenset({DEFAULT_FETCH_SOURCE, LATEST_FETCH_SOURCE})
+DETAIL_PLACEHOLDER_VALUES = {
+    "-",
+    "--",
+    "n a",
+    "na",
+    "n/a",
+    "none",
+    "null",
+    "nil",
+    "not applicable",
+    "not available",
+    "unknown",
+}
 
 
 @dataclass
@@ -377,21 +390,48 @@ def _extract_detail_pairs(soup: BeautifulSoup) -> dict[str, str]:
 
 
 def _pick_detail_value(pairs: dict[str, str], aliases: tuple[str, ...]) -> str:
-    placeholder_values = {
-        "n a",
-        "na",
-        "none",
-        "null",
-        "nil",
-        "not applicable",
-        "not available",
-    }
-
     for alias in aliases:
         for key, value in pairs.items():
             normalized_value = _normalize_detail_label(value)
-            if alias in key and value and normalized_value not in placeholder_values:
+            if alias in key and value and normalized_value not in DETAIL_PLACEHOLDER_VALUES:
                 return value
+    return ""
+
+
+def _is_meaningful_detail_value(value: str) -> bool:
+    normalized = _normalize_detail_label(value or "")
+    return bool(normalized) and normalized not in DETAIL_PLACEHOLDER_VALUES
+
+
+def _extract_note_from_blocks(soup: BeautifulSoup) -> str:
+    label_only_pattern = re.compile(r"^(note|notes|comment|comments|remark|remarks)\s*[:：]?$", re.I)
+    inline_pattern = re.compile(r"^(note|notes|comment|comments|remark|remarks)\s*[:：]\s*(.+)$", re.I)
+
+    for node in soup.find_all(["td", "th", "div", "p", "li", "span"]):
+        raw_text = node.get_text("\n", strip=True)
+        if not raw_text:
+            continue
+
+        lines: list[str] = []
+        for part in raw_text.splitlines():
+            compact = _compact_text(part, limit=800)
+            if compact:
+                lines.append(compact)
+        if not lines:
+            continue
+
+        first_line = lines[0]
+        inline_match = inline_pattern.match(first_line)
+        if inline_match:
+            inline_note = _compact_text(inline_match.group(2), limit=1200)
+            if _is_meaningful_detail_value(inline_note):
+                return inline_note
+
+        if label_only_pattern.match(first_line) and len(lines) > 1:
+            note_candidate = _compact_text(" ".join(lines[1:]), limit=1200)
+            if _is_meaningful_detail_value(note_candidate):
+                return note_candidate
+
     return ""
 
 
@@ -426,9 +466,12 @@ def _extract_detail_fields(html: str) -> dict[str, str]:
     if not note:
         for node in soup.select("textarea, .note, .comment, #note, #comment"):
             candidate = _compact_text(node.get_text(" ", strip=True))
-            if candidate:
+            if _is_meaningful_detail_value(candidate):
                 note = candidate
                 break
+
+    if not note:
+        note = _extract_note_from_blocks(soup)
 
     return {
         "detail_employer": employer,
@@ -518,7 +561,7 @@ def enrich_missing_details_for_payload_rows(rows: list[dict[str, Any]]) -> dict[
             continue
 
         existing_note = str(row.get("detail_note") or "").strip()
-        if existing_note:
+        if _is_meaningful_detail_value(existing_note):
             continue
 
         candidates.append(
@@ -571,16 +614,16 @@ def enrich_missing_details_for_payload_rows(rows: list[dict[str, Any]]) -> dict[
     updated = 0
     for (idx, enriched) in candidates:
         updated_this_row = False
-        if not str(rows[idx].get("detail_employer") or "").strip() and enriched.detail_employer:
+        if not _is_meaningful_detail_value(str(rows[idx].get("detail_employer") or "")) and _is_meaningful_detail_value(enriched.detail_employer):
             rows[idx]["detail_employer"] = enriched.detail_employer
             updated_this_row = True
-        if not str(rows[idx].get("detail_note") or "").strip() and enriched.detail_note:
+        if not _is_meaningful_detail_value(str(rows[idx].get("detail_note") or "")) and _is_meaningful_detail_value(enriched.detail_note):
             rows[idx]["detail_note"] = enriched.detail_note
             updated_this_row = True
-        if not str(rows[idx].get("detail_city") or "").strip() and enriched.detail_city:
+        if not _is_meaningful_detail_value(str(rows[idx].get("detail_city") or "")) and _is_meaningful_detail_value(enriched.detail_city):
             rows[idx]["detail_city"] = enriched.detail_city
             updated_this_row = True
-        if not str(rows[idx].get("detail_state") or "").strip() and enriched.detail_state:
+        if not _is_meaningful_detail_value(str(rows[idx].get("detail_state") or "")) and _is_meaningful_detail_value(enriched.detail_state):
             rows[idx]["detail_state"] = enriched.detail_state
             updated_this_row = True
         if updated_this_row:

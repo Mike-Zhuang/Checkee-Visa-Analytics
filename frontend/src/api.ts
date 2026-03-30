@@ -1,5 +1,11 @@
 import type {
+    AsyncRefreshJobState,
+    AsyncRefreshStartResponse,
     AdminLoginResponse,
+    CaseSortBy,
+    CaseSortOrder,
+    DetailEnrichmentStartResponse,
+    DetailEnrichmentState,
     MajorClassificationsResponse,
     AdminStaleRefreshResponse,
     AdminSessionStateResponse,
@@ -129,6 +135,59 @@ export async function refreshDataWithSession(
     adminToken: string
 ): Promise<void> {
     return refreshDataInternal(payload, undefined, adminToken)
+}
+
+export async function startAdminAsyncRefresh(
+    payload: RefreshPayload = { all_months: false, months: 6 },
+    adminToken: string
+): Promise<AsyncRefreshStartResponse> {
+    const res = await fetch(`${API_BASE}/admin/refresh/async-start`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${adminToken.trim()}`
+        },
+        body: JSON.stringify(payload)
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`admin async refresh start failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as AsyncRefreshStartResponse
+}
+
+export async function getAdminAsyncRefreshState(adminToken: string): Promise<AsyncRefreshJobState> {
+    const res = await fetch(`${API_BASE}/admin/refresh/async-state`, {
+        headers: { Authorization: `Bearer ${adminToken.trim()}` }
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`admin async refresh state failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as AsyncRefreshJobState
+}
+
+export async function startAdminDetailEnrichment(adminToken: string): Promise<DetailEnrichmentStartResponse> {
+    const res = await fetch(`${API_BASE}/admin/detail-enrichment/start`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken.trim()}` }
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`admin detail enrichment start failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as DetailEnrichmentStartResponse
+}
+
+export async function getAdminDetailEnrichmentState(adminToken: string): Promise<DetailEnrichmentState> {
+    const res = await fetch(`${API_BASE}/admin/detail-enrichment/state`, {
+        headers: { Authorization: `Bearer ${adminToken.trim()}` }
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`admin detail enrichment state failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as DetailEnrichmentState
 }
 
 export async function loginAdmin(password: string): Promise<AdminLoginResponse> {
@@ -286,10 +345,18 @@ export async function getAnomalies(filters: Filters, thresholdDays = 120, limit 
     return data.items
 }
 
-export async function getCases(filters: Filters, limit = 200, offset = 0): Promise<{ total: number; items: CaseItem[] }> {
+export async function getCases(
+    filters: Filters,
+    limit = 200,
+    offset = 0,
+    sortBy: CaseSortBy = 'check_date',
+    sortOrder: CaseSortOrder = 'desc'
+): Promise<{ total: number; items: CaseItem[] }> {
     const params = paramsFromFilters(filters)
     params.set('limit', String(limit))
     params.set('offset', String(offset))
+    params.set('sort_by', sortBy)
+    params.set('sort_order', sortOrder)
     return fetchJson<{ total: number; limit: number; offset: number; items: CaseItem[] }>(`/cases?${params.toString()}`)
 }
 

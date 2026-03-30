@@ -36,9 +36,25 @@ class RefreshRateLimitError(ValueError):
 
 
 class DataService:
+    _DETAIL_ENRICHMENT_BATCH_SIZE = 50
+    _DETAIL_PLACEHOLDERS = {
+        "-",
+        "--",
+        "n/a",
+        "na",
+        "n a",
+        "none",
+        "null",
+        "nil",
+        "not applicable",
+        "not available",
+        "unknown",
+    }
+
     def __init__(self) -> None:
         self._lock = RLock()
         self._detail_enrichment_running = False
+        self._refresh_job_running = False
 
     @staticmethod
     def _row_identity(row: dict[str, Any]) -> str:
@@ -54,6 +70,11 @@ class DataService:
             ]
         )
         return f"fallback:{fallback}"
+
+    @classmethod
+    def _is_meaningful_detail_value(cls, value: str) -> bool:
+        normalized = " ".join(str(value or "").strip().lower().replace("/", " ").split())
+        return bool(normalized) and normalized not in cls._DETAIL_PLACEHOLDERS
 
     def _merge_existing_detail_fields(
         self,
@@ -141,10 +162,10 @@ class DataService:
             changed = False
             for field in ("detail_employer", "detail_note", "detail_city", "detail_state"):
                 current_value = str(row.get(field) or "").strip()
-                if current_value:
+                if self._is_meaningful_detail_value(current_value):
                     continue
                 next_value = str(update.get(field) or "").strip()
-                if not next_value:
+                if not self._is_meaningful_detail_value(next_value):
                     continue
                 row[field] = next_value
                 changed = True
@@ -153,56 +174,160 @@ class DataService:
                 updated_count += 1
         return updated_count
 
-    def _run_detail_enrichment_job(self) -> None:
+    def _detail_enrichment_state(self) -> dict[str, Any]:
+        meta = load_meta()
+        state = meta.get("detail_enrichment")
+        return dict(state) if isinstance(state, dict) else {"status": "idle"}
+
+    def _set_detail_enrichment_state(self, payload: dict[str, Any]) -> None:
+        meta = load_meta()
+        save_meta({**meta, "detail_enrichment": payload}, update_timestamp=False)
+
+    def _collect_detail_enrichment_candidates(self, rows: list[dict[str, Any]]) -> list[str]:
+        identities: list[str] = []
+        for row in rows:
+            detail_url = str(row.get("detail_url") or "").strip()
+            detail_note = str(row.get("detail_note") or "").strip()
+            if not detail_url or self._is_meaningful_detail_value(detail_note):
+                continue
+            identities.append(self._row_identity(row))
+        return identities
+
+    def _build_updates_by_identity(self, rows: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
+        return {
+            self._row_identity(row): {
+                "detail_employer": str(row.get("detail_employer") or ""),
+                "detail_note": str(row.get("detail_note") or ""),
+                "detail_city": str(row.get("detail_city") or ""),
+                "detail_state": str(row.get("detail_state") or ""),
+            }
+            for row in rows
+        }
+
+    def _run_detail_enrichment_job_with_candidates(self, candidate_identities: list[str]) -> None:
+        processed_count = 0
+        updated_count = 0
+        fetch_error_count = 0
+        forbidden_count = 0
+        parse_empty_count = 0
+        enriched_count = 0
+        started_at = datetime.now().isoformat(timespec="seconds")
+
         try:
-            snapshot_rows = load_cases()
-            if not snapshot_rows:
+            candidate_set = set(candidate_identities)
+            candidate_count = len(candidate_identities)
+            if candidate_count == 0:
+                with self._lock:
+                    self._set_detail_enrichment_state(
+                        {
+                            "status": "completed",
+                            "started_at": started_at,
+                            "finished_at": datetime.now().isoformat(timespec="seconds"),
+                            "candidate_count": 0,
+                            "processed_count": 0,
+                            "updated_count": 0,
+                            "fetch_error_count": 0,
+                            "forbidden_count": 0,
+                            "parse_empty_count": 0,
+                            "enriched_count": 0,
+                            "last_error": "",
+                            "last_updated_at": datetime.now().isoformat(timespec="seconds"),
+                        }
+                    )
                 return
 
-            snapshot_copy = [dict(row) for row in snapshot_rows]
-            metrics = enrich_missing_details_for_payload_rows(snapshot_copy)
-            updates_by_identity = {
-                self._row_identity(row): {
-                    "detail_employer": str(row.get("detail_employer") or ""),
-                    "detail_note": str(row.get("detail_note") or ""),
-                    "detail_city": str(row.get("detail_city") or ""),
-                    "detail_state": str(row.get("detail_state") or ""),
-                }
-                for row in snapshot_copy
-            }
+            for chunk_start in range(0, candidate_count, self._DETAIL_ENRICHMENT_BATCH_SIZE):
+                chunk_identities = set(
+                    candidate_identities[chunk_start: chunk_start + self._DETAIL_ENRICHMENT_BATCH_SIZE]
+                )
+                if not chunk_identities:
+                    continue
+
+                with self._lock:
+                    latest_rows = load_cases()
+                    chunk_rows = [
+                        dict(row)
+                        for row in latest_rows
+                        if self._row_identity(row) in chunk_identities
+                        and self._row_identity(row) in candidate_set
+                    ]
+
+                if not chunk_rows:
+                    processed_count += len(chunk_identities)
+                    continue
+
+                metrics = enrich_missing_details_for_payload_rows(chunk_rows)
+                updates_by_identity = self._build_updates_by_identity(chunk_rows)
+
+                chunk_processed = len(chunk_rows)
+                chunk_fetch_error = int(metrics.get("detail_fetch_error_count") or 0)
+                chunk_forbidden = int(metrics.get("detail_forbidden_count") or 0)
+                chunk_parse_empty = int(metrics.get("detail_parse_empty_count") or 0)
+                chunk_enriched = int(metrics.get("detail_enriched_count") or 0)
+
+                with self._lock:
+                    latest_rows = load_cases()
+                    chunk_updated = self._apply_detail_updates_by_identity(latest_rows, updates_by_identity)
+                    if chunk_updated > 0:
+                        save_cases(latest_rows)
+
+                    processed_count += chunk_processed
+                    updated_count += chunk_updated
+                    fetch_error_count += chunk_fetch_error
+                    forbidden_count += chunk_forbidden
+                    parse_empty_count += chunk_parse_empty
+                    enriched_count += chunk_enriched
+
+                    self._set_detail_enrichment_state(
+                        {
+                            "status": "running",
+                            "started_at": started_at,
+                            "candidate_count": candidate_count,
+                            "processed_count": processed_count,
+                            "updated_count": updated_count,
+                            "fetch_error_count": fetch_error_count,
+                            "forbidden_count": forbidden_count,
+                            "parse_empty_count": parse_empty_count,
+                            "enriched_count": enriched_count,
+                            "last_error": "",
+                            "last_updated_at": datetime.now().isoformat(timespec="seconds"),
+                        }
+                    )
 
             with self._lock:
-                current_rows = load_cases()
-                updated_count = self._apply_detail_updates_by_identity(current_rows, updates_by_identity)
-                if updated_count > 0:
-                    save_cases(current_rows)
-
-                meta = load_meta()
-                save_meta(
+                self._set_detail_enrichment_state(
                     {
-                        **meta,
-                        "detail_enrichment": {
-                            "status": "completed",
-                            "finished_at": datetime.now().isoformat(timespec="seconds"),
-                            "updated_row_count": updated_count,
-                            "metrics": metrics,
-                        },
-                    },
-                    update_timestamp=False,
+                        "status": "completed",
+                        "started_at": started_at,
+                        "finished_at": datetime.now().isoformat(timespec="seconds"),
+                        "candidate_count": len(candidate_identities),
+                        "processed_count": processed_count,
+                        "updated_count": updated_count,
+                        "fetch_error_count": fetch_error_count,
+                        "forbidden_count": forbidden_count,
+                        "parse_empty_count": parse_empty_count,
+                        "enriched_count": enriched_count,
+                        "last_error": "",
+                        "last_updated_at": datetime.now().isoformat(timespec="seconds"),
+                    }
                 )
         except Exception as exc:  # noqa: BLE001
             with self._lock:
-                meta = load_meta()
-                save_meta(
+                self._set_detail_enrichment_state(
                     {
-                        **meta,
-                        "detail_enrichment": {
-                            "status": "failed",
-                            "finished_at": datetime.now().isoformat(timespec="seconds"),
-                            "error": str(exc),
-                        },
-                    },
-                    update_timestamp=False,
+                        "status": "failed",
+                        "started_at": started_at,
+                        "finished_at": datetime.now().isoformat(timespec="seconds"),
+                        "candidate_count": len(candidate_identities),
+                        "processed_count": processed_count,
+                        "updated_count": updated_count,
+                        "fetch_error_count": fetch_error_count,
+                        "forbidden_count": forbidden_count,
+                        "parse_empty_count": parse_empty_count,
+                        "enriched_count": enriched_count,
+                        "last_error": str(exc),
+                        "last_updated_at": datetime.now().isoformat(timespec="seconds"),
+                    }
                 )
         finally:
             with self._lock:
@@ -212,23 +337,203 @@ class DataService:
         with self._lock:
             if self._detail_enrichment_running:
                 return False
-            self._detail_enrichment_running = True
 
-            meta = load_meta()
-            save_meta(
+            rows = load_cases()
+            candidate_identities = self._collect_detail_enrichment_candidates(rows)
+            started_at = datetime.now().isoformat(timespec="seconds")
+
+            if not candidate_identities:
+                self._set_detail_enrichment_state(
+                    {
+                        "status": "completed",
+                        "started_at": started_at,
+                        "finished_at": started_at,
+                        "candidate_count": 0,
+                        "processed_count": 0,
+                        "updated_count": 0,
+                        "fetch_error_count": 0,
+                        "forbidden_count": 0,
+                        "parse_empty_count": 0,
+                        "enriched_count": 0,
+                        "last_error": "",
+                        "last_updated_at": started_at,
+                    }
+                )
+                return False
+
+            self._detail_enrichment_running = True
+            self._set_detail_enrichment_state(
                 {
-                    **meta,
-                    "detail_enrichment": {
-                        "status": "running",
-                        "started_at": datetime.now().isoformat(timespec="seconds"),
-                    },
-                },
-                update_timestamp=False,
+                    "status": "running",
+                    "started_at": started_at,
+                    "candidate_count": len(candidate_identities),
+                    "processed_count": 0,
+                    "updated_count": 0,
+                    "fetch_error_count": 0,
+                    "forbidden_count": 0,
+                    "parse_empty_count": 0,
+                    "enriched_count": 0,
+                    "last_error": "",
+                    "last_updated_at": started_at,
+                }
             )
 
-        worker = Thread(target=self._run_detail_enrichment_job, daemon=True, name="checkee-detail-enrichment")
+        worker = Thread(
+            target=self._run_detail_enrichment_job_with_candidates,
+            args=(candidate_identities,),
+            daemon=True,
+            name="checkee-detail-enrichment",
+        )
         worker.start()
         return True
+
+    def trigger_detail_enrichment(self) -> dict[str, Any]:
+        started = self._start_detail_enrichment_job()
+        state = self._detail_enrichment_state()
+        status = str(state.get("status") or "idle")
+        if started:
+            return {"started": True, "status": status, "message": "detail enrichment started", "state": state}
+        if self._detail_enrichment_running:
+            return {"started": False, "status": "running", "message": "detail enrichment already running", "state": state}
+        if status == "completed" and int(state.get("candidate_count") or 0) == 0:
+            return {"started": False, "status": "completed", "message": "no note candidates", "state": state}
+        return {"started": False, "status": status, "message": "detail enrichment not started", "state": state}
+
+    def _refresh_job_state(self) -> dict[str, Any]:
+        meta = load_meta()
+        state = meta.get("refresh_job")
+        return dict(state) if isinstance(state, dict) else {"status": "idle"}
+
+    def _set_refresh_job_state(self, payload: dict[str, Any]) -> None:
+        meta = load_meta()
+        save_meta({**meta, "refresh_job": payload}, update_timestamp=False)
+
+    def _run_refresh_job(
+        self,
+        *,
+        all_months: bool,
+        months: int,
+        from_month: str | None,
+        sources: list[str] | None,
+        triggered_by: str,
+        started_at: str,
+    ) -> None:
+        try:
+            self._set_refresh_job_state(
+                {
+                    "triggered_by": triggered_by,
+                    "status": "running",
+                    "started_at": started_at,
+                    "finished_at": None,
+                    "all_months": all_months,
+                    "months": months,
+                    "from_month": from_month,
+                    "sources": sources or [],
+                    "last_error": "",
+                    "last_updated_at": datetime.now().isoformat(timespec="seconds"),
+                }
+            )
+            result = self.refresh(
+                all_months=all_months,
+                months=months,
+                from_month=from_month,
+                sources=sources,
+                triggered_by=triggered_by,
+            )
+            self._set_refresh_job_state(
+                {
+                    "triggered_by": triggered_by,
+                    "status": "completed",
+                    "started_at": started_at,
+                    "finished_at": datetime.now().isoformat(timespec="seconds"),
+                    "all_months": all_months,
+                    "months": months,
+                    "from_month": from_month,
+                    "sources": sources or [],
+                    "last_error": "",
+                    "last_updated_at": datetime.now().isoformat(timespec="seconds"),
+                    "result": {
+                        "total_cases": int(result.get("total_cases") or 0),
+                        "fetched_month_count": len(result.get("fetched_months") or []),
+                    },
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.record_refresh_event(
+                status="error",
+                message=f"admin async refresh failed: {exc}",
+                triggered_by=triggered_by,
+            )
+            self._set_refresh_job_state(
+                {
+                    "triggered_by": triggered_by,
+                    "status": "failed",
+                    "started_at": started_at,
+                    "finished_at": datetime.now().isoformat(timespec="seconds"),
+                    "all_months": all_months,
+                    "months": months,
+                    "from_month": from_month,
+                    "sources": sources or [],
+                    "last_error": str(exc),
+                    "last_updated_at": datetime.now().isoformat(timespec="seconds"),
+                }
+            )
+        finally:
+            with self._lock:
+                self._refresh_job_running = False
+
+    def start_refresh_job(
+        self,
+        *,
+        all_months: bool,
+        months: int,
+        from_month: str | None,
+        sources: list[str] | None,
+        triggered_by: str,
+    ) -> dict[str, Any]:
+        with self._lock:
+            if self._refresh_job_running:
+                state = self._refresh_job_state()
+                return {"started": False, "message": "refresh job already running", "state": state}
+            self._refresh_job_running = True
+            started_at = datetime.now().isoformat(timespec="seconds")
+            self._set_refresh_job_state(
+                {
+                    "triggered_by": triggered_by,
+                    "status": "started",
+                    "started_at": started_at,
+                    "finished_at": None,
+                    "all_months": all_months,
+                    "months": months,
+                    "from_month": from_month,
+                    "sources": sources or [],
+                    "last_error": "",
+                    "last_updated_at": started_at,
+                }
+            )
+
+        worker = Thread(
+            target=self._run_refresh_job,
+            kwargs={
+                "all_months": all_months,
+                "months": months,
+                "from_month": from_month,
+                "sources": sources,
+                "triggered_by": triggered_by,
+                "started_at": started_at,
+            },
+            daemon=True,
+            name="checkee-admin-refresh",
+        )
+        worker.start()
+        state = self._refresh_job_state()
+        return {"started": True, "message": "refresh job started", "state": state}
+
+    def get_refresh_job_state(self) -> dict[str, Any]:
+        return self._refresh_job_state()
+
+    def get_detail_enrichment_state(self) -> dict[str, Any]:
+        return self._detail_enrichment_state()
 
     def record_refresh_event(
         self,

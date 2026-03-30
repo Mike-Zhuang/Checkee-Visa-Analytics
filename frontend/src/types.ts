@@ -42,6 +42,8 @@ export type MetaState = {
     refresh_available_in_seconds?: number
     last_refresh_result?: RefreshHistoryItem
     refresh_history?: RefreshHistoryItem[]
+    refresh_job?: AsyncRefreshJobState
+    detail_enrichment?: DetailEnrichmentState
     fetched_month_range: {
         latest: string | null
         earliest: string | null
@@ -57,6 +59,54 @@ export type RefreshHistoryItem = {
     triggered_by: string
     details?: Record<string, unknown>
 }
+
+export type AsyncRefreshJobState = {
+    status: 'idle' | 'started' | 'running' | 'completed' | 'failed' | string
+    triggered_by?: string
+    started_at?: string | null
+    finished_at?: string | null
+    all_months?: boolean
+    months?: number
+    from_month?: string | null
+    sources?: string[]
+    last_error?: string
+    last_updated_at?: string
+    result?: {
+        total_cases?: number
+        fetched_month_count?: number
+    }
+}
+
+export type DetailEnrichmentState = {
+    status: 'idle' | 'running' | 'completed' | 'failed' | string
+    started_at?: string
+    finished_at?: string
+    candidate_count?: number
+    processed_count?: number
+    updated_count?: number
+    fetch_error_count?: number
+    forbidden_count?: number
+    parse_empty_count?: number
+    enriched_count?: number
+    last_error?: string
+    last_updated_at?: string
+}
+
+export type AsyncRefreshStartResponse = {
+    started: boolean
+    message: string
+    state: AsyncRefreshJobState
+}
+
+export type DetailEnrichmentStartResponse = {
+    started: boolean
+    status: string
+    message: string
+    state: DetailEnrichmentState
+}
+
+export type CaseSortBy = 'check_date' | 'complete_date'
+export type CaseSortOrder = 'asc' | 'desc'
 
 export type OverviewStats = {
     total_cases: number

@@ -13,7 +13,10 @@ const apiMock = vi.hoisted(() => ({
     saveAdminMajorOverrides: vi.fn(),
     deleteAdminMajorOverride: vi.fn(),
     logoutAdmin: vi.fn(),
-    refreshDataWithSession: vi.fn(),
+    startAdminAsyncRefresh: vi.fn(),
+    getAdminAsyncRefreshState: vi.fn(),
+    startAdminDetailEnrichment: vi.fn(),
+    getAdminDetailEnrichmentState: vi.fn(),
     triggerAdminStaleRefresh: vi.fn()
 }))
 
@@ -26,7 +29,10 @@ vi.mock('../api', () => ({
     saveAdminMajorOverrides: apiMock.saveAdminMajorOverrides,
     deleteAdminMajorOverride: apiMock.deleteAdminMajorOverride,
     logoutAdmin: apiMock.logoutAdmin,
-    refreshDataWithSession: apiMock.refreshDataWithSession,
+    startAdminAsyncRefresh: apiMock.startAdminAsyncRefresh,
+    getAdminAsyncRefreshState: apiMock.getAdminAsyncRefreshState,
+    startAdminDetailEnrichment: apiMock.startAdminDetailEnrichment,
+    getAdminDetailEnrichmentState: apiMock.getAdminDetailEnrichmentState,
     triggerAdminStaleRefresh: apiMock.triggerAdminStaleRefresh
 }))
 
@@ -139,7 +145,24 @@ describe('AdminPage', () => {
         apiMock.saveAdminMajorOverrides.mockResolvedValue(undefined)
         apiMock.deleteAdminMajorOverride.mockResolvedValue(undefined)
         apiMock.logoutAdmin.mockResolvedValue(undefined)
-        apiMock.refreshDataWithSession.mockResolvedValue(undefined)
+        apiMock.startAdminAsyncRefresh.mockResolvedValue({
+            started: true,
+            message: 'refresh job started',
+            state: { status: 'started' }
+        })
+        apiMock.getAdminAsyncRefreshState.mockResolvedValue({ status: 'completed' })
+        apiMock.startAdminDetailEnrichment.mockResolvedValue({
+            started: false,
+            status: 'completed',
+            message: 'no note candidates',
+            state: { status: 'completed', candidate_count: 0, processed_count: 0, updated_count: 0 }
+        })
+        apiMock.getAdminDetailEnrichmentState.mockResolvedValue({
+            status: 'completed',
+            candidate_count: 0,
+            processed_count: 0,
+            updated_count: 0
+        })
         apiMock.triggerAdminStaleRefresh.mockResolvedValue({
             triggered: false,
             reason: 'fresh_enough',
@@ -295,6 +318,35 @@ describe('AdminPage', () => {
 
         const selects = within(row).getAllByRole('combobox')
         expect(selects[1]).toHaveValue('Unspecified')
+    })
+
+    it('点击手动刷新应走异步刷新接口并轮询状态', async () => {
+        const user = userEvent.setup()
+        apiMock.loginAdmin.mockResolvedValue({
+            token: 'session-token',
+            expires_at: '2026-03-28T15:58:21.837314Z'
+        })
+
+        render(<AdminPage />)
+
+        await waitFor(() => {
+            expect(apiMock.getOptions).toHaveBeenCalledTimes(1)
+            expect(apiMock.getMetaState).toHaveBeenCalledTimes(1)
+        })
+
+        await user.type(screen.getByPlaceholderText('请输入管理员密码'), 'Zcb070920!')
+        await user.click(screen.getByRole('button', { name: '登录' }))
+
+        await waitFor(() => {
+            expect(screen.getByText('已登录')).toBeInTheDocument()
+        })
+
+        await user.click(screen.getByRole('button', { name: '立即手动刷新' }))
+
+        await waitFor(() => {
+            expect(apiMock.startAdminAsyncRefresh).toHaveBeenCalled()
+            expect(apiMock.getAdminAsyncRefreshState).toHaveBeenCalledWith('session-token')
+        })
     })
 
     it('数据过旧时应触发管理员兜底刷新', async () => {

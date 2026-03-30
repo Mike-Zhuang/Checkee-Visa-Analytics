@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 from datetime import datetime
 from io import StringIO
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse, StreamingResponse
@@ -91,6 +92,34 @@ def _filtered_rows(
         has_note=has_note,
         search_text=(search_text or "").strip() or None,
     )
+
+
+def _parse_sort_date(raw: str) -> datetime | None:
+    value = raw.strip()
+    if not value or value == "0000-00-00":
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return None
+
+
+def _sort_case_rows(
+    rows: list[dict],
+    *,
+    sort_by: Literal["check_date", "complete_date"],
+    sort_order: Literal["asc", "desc"],
+) -> list[dict]:
+    is_desc = sort_order == "desc"
+
+    def key(row: dict) -> tuple[int, int, str]:
+        date_value = _parse_sort_date(str(row.get(sort_by) or ""))
+        if date_value is None:
+            return (1, 0, str(row.get("case_number") or ""))
+        ordinal = date_value.toordinal()
+        return (0, -ordinal if is_desc else ordinal, str(row.get("case_number") or ""))
+
+    return sorted(rows, key=key)
 
 
 def _resolve_refresh_triggered_by(request: Request) -> str:
@@ -277,6 +306,37 @@ def admin_refresh_stale_trigger(request: Request) -> AdminStaleRefreshResponse:
         )
 
 
+@router.post("/admin/refresh/async-start")
+def admin_refresh_async_start(req: RefreshRequest, request: Request) -> dict:
+    _require_admin_session(request)
+    result = service.start_refresh_job(
+        all_months=req.all_months,
+        months=req.months,
+        from_month=req.from_month,
+        sources=req.sources,
+        triggered_by=REFRESH_TRIGGERED_BY_MANUAL,
+    )
+    return result
+
+
+@router.get("/admin/refresh/async-state")
+def admin_refresh_async_state(request: Request) -> dict:
+    _require_admin_session(request)
+    return service.get_refresh_job_state()
+
+
+@router.post("/admin/detail-enrichment/start")
+def admin_detail_enrichment_start(request: Request) -> dict:
+    _require_admin_session(request)
+    return service.trigger_detail_enrichment()
+
+
+@router.get("/admin/detail-enrichment/state")
+def admin_detail_enrichment_state(request: Request) -> dict:
+    _require_admin_session(request)
+    return service.get_detail_enrichment_state()
+
+
 @router.get("/admin/major-classifications", response_model=MajorClassificationsResponse)
 def admin_major_classifications(
     request: Request,
@@ -412,6 +472,8 @@ def cases(
     detail_states: str | None = Query(default=None),
     has_note: bool | None = Query(default=None),
     search_text: str | None = Query(default=None),
+    sort_by: Literal["check_date", "complete_date"] = Query(default="check_date"),
+    sort_order: Literal["asc", "desc"] = Query(default="desc"),
     limit: int = Query(default=API_DEFAULT_CASES_LIMIT, ge=1, le=API_MAX_CASES_LIMIT),
     offset: int = Query(default=0, ge=0),
 ):
@@ -430,8 +492,9 @@ def cases(
         has_note,
         search_text,
     )
-    total = len(filtered)
-    data = filtered[offset : offset + limit]
+    sorted_filtered = _sort_case_rows(filtered, sort_by=sort_by, sort_order=sort_order)
+    total = len(sorted_filtered)
+    data = sorted_filtered[offset : offset + limit]
     return {"total": total, "limit": limit, "offset": offset, "items": data}
 
 

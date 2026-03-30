@@ -41,6 +41,12 @@ describe('CaseTable', () => {
                 total={0}
                 page={1}
                 pageSize={50}
+                localHasNoteOnly={false}
+                onLocalHasNoteOnlyChange={vi.fn()}
+                sortBy="check_date"
+                sortOrder="desc"
+                onSortByChange={vi.fn()}
+                onSortOrderChange={vi.fn()}
                 onPageChange={vi.fn()}
                 onPageSizeChange={vi.fn()}
             />
@@ -59,6 +65,12 @@ describe('CaseTable', () => {
                 total={120}
                 page={1}
                 pageSize={50}
+                localHasNoteOnly={false}
+                onLocalHasNoteOnlyChange={vi.fn()}
+                sortBy="check_date"
+                sortOrder="desc"
+                onSortByChange={vi.fn()}
+                onSortOrderChange={vi.fn()}
                 onPageChange={onPageChange}
                 onPageSizeChange={vi.fn()}
             />
@@ -75,6 +87,12 @@ describe('CaseTable', () => {
                 total={1}
                 page={1}
                 pageSize={50}
+                localHasNoteOnly={false}
+                onLocalHasNoteOnlyChange={vi.fn()}
+                sortBy="check_date"
+                sortOrder="desc"
+                onSortByChange={vi.fn()}
+                onSortOrderChange={vi.fn()}
                 onPageChange={vi.fn()}
                 onPageSizeChange={vi.fn()}
             />
@@ -101,6 +119,12 @@ describe('CaseTable', () => {
                 total={1}
                 page={1}
                 pageSize={50}
+                localHasNoteOnly={false}
+                onLocalHasNoteOnlyChange={vi.fn()}
+                sortBy="check_date"
+                sortOrder="desc"
+                onSortByChange={vi.fn()}
+                onSortOrderChange={vi.fn()}
                 onPageChange={vi.fn()}
                 onPageSizeChange={vi.fn()}
             />
@@ -110,5 +134,58 @@ describe('CaseTable', () => {
         expect(screen.getByLabelText('时间线')).toBeInTheDocument()
         expect(screen.getByText('2.5')).toBeInTheDocument()
         expect(screen.getByText('3.18')).toBeInTheDocument()
+    })
+
+    it('本地 Note 开关应触发 onLocalHasNoteOnlyChange', async () => {
+        const onLocalHasNoteOnlyChange = vi.fn()
+        const user = userEvent.setup()
+
+        render(
+            <CaseTable
+                rows={rows}
+                total={1}
+                page={1}
+                pageSize={50}
+                localHasNoteOnly={false}
+                onLocalHasNoteOnlyChange={onLocalHasNoteOnlyChange}
+                sortBy="check_date"
+                sortOrder="desc"
+                onSortByChange={vi.fn()}
+                onSortOrderChange={vi.fn()}
+                onPageChange={vi.fn()}
+                onPageSizeChange={vi.fn()}
+            />
+        )
+
+        await user.click(screen.getByRole('checkbox', { name: '仅看有 Note（仅明细）' }))
+        expect(onLocalHasNoteOnlyChange).toHaveBeenCalledWith(true)
+    })
+
+    it('排序控件应触发对应回调', async () => {
+        const onSortByChange = vi.fn()
+        const onSortOrderChange = vi.fn()
+        const user = userEvent.setup()
+
+        render(
+            <CaseTable
+                rows={rows}
+                total={1}
+                page={1}
+                pageSize={50}
+                localHasNoteOnly={false}
+                onLocalHasNoteOnlyChange={vi.fn()}
+                sortBy="check_date"
+                sortOrder="desc"
+                onSortByChange={onSortByChange}
+                onSortOrderChange={onSortOrderChange}
+                onPageChange={vi.fn()}
+                onPageSizeChange={vi.fn()}
+            />
+        )
+
+        await user.selectOptions(screen.getByLabelText('排序字段'), 'complete_date')
+        await user.selectOptions(screen.getByLabelText('排序方向'), 'asc')
+        expect(onSortByChange).toHaveBeenCalledWith('complete_date')
+        expect(onSortOrderChange).toHaveBeenCalledWith('asc')
     })
 })

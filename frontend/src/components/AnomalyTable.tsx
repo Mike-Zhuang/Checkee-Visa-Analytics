@@ -27,8 +27,8 @@ export default function AnomalyTable({ rows }: Props) {
                     <p>{t('anomaly.empty')}</p>
                 </div>
             ) : (
-                <div className="table-wrap">
-                    <table>
+                <div className="table-wrap anomaly-table-wrap">
+                    <table className="anomaly-table">
                         <thead>
                             <tr>
                                 <th>{t('anomaly.case')}</th>

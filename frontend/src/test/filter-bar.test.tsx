@@ -62,6 +62,8 @@ describe('FilterBar', () => {
                 onRefreshFromMonthChange={vi.fn()}
                 onRefreshSourcesChange={vi.fn()}
                 onChange={vi.fn()}
+                onApply={vi.fn()}
+                hasPendingChanges={false}
                 onReset={vi.fn()}
                 onRefresh={vi.fn()}
             />
@@ -91,6 +93,8 @@ describe('FilterBar', () => {
                 onRefreshFromMonthChange={vi.fn()}
                 onRefreshSourcesChange={vi.fn()}
                 onChange={onChange}
+                onApply={vi.fn()}
+                hasPendingChanges={false}
                 onReset={vi.fn()}
                 onRefresh={vi.fn()}
             />
@@ -123,6 +127,8 @@ describe('FilterBar', () => {
                 onRefreshFromMonthChange={vi.fn()}
                 onRefreshSourcesChange={vi.fn()}
                 onChange={onChange}
+                onApply={vi.fn()}
+                hasPendingChanges={false}
                 onReset={vi.fn()}
                 onRefresh={vi.fn()}
             />
@@ -154,6 +160,8 @@ describe('FilterBar', () => {
                 onRefreshFromMonthChange={vi.fn()}
                 onRefreshSourcesChange={vi.fn()}
                 onChange={onChange}
+                onApply={vi.fn()}
+                hasPendingChanges={false}
                 onReset={vi.fn()}
                 onRefresh={vi.fn()}
             />
@@ -185,6 +193,8 @@ describe('FilterBar', () => {
                 onRefreshFromMonthChange={vi.fn()}
                 onRefreshSourcesChange={vi.fn()}
                 onChange={onChange}
+                onApply={vi.fn()}
+                hasPendingChanges={false}
                 onReset={vi.fn()}
                 onRefresh={vi.fn()}
             />
@@ -216,6 +226,8 @@ describe('FilterBar', () => {
                 onRefreshFromMonthChange={vi.fn()}
                 onRefreshSourcesChange={vi.fn()}
                 onChange={onChange}
+                onApply={vi.fn()}
+                hasPendingChanges={false}
                 onReset={vi.fn()}
                 onRefresh={vi.fn()}
             />
@@ -245,6 +257,8 @@ describe('FilterBar', () => {
                 onRefreshFromMonthChange={vi.fn()}
                 onRefreshSourcesChange={vi.fn()}
                 onChange={vi.fn()}
+                onApply={vi.fn()}
+                hasPendingChanges={false}
                 onReset={vi.fn()}
                 onRefresh={vi.fn()}
             />
@@ -273,6 +287,8 @@ describe('FilterBar', () => {
                 onRefreshFromMonthChange={vi.fn()}
                 onRefreshSourcesChange={vi.fn()}
                 onChange={onChange}
+                onApply={vi.fn()}
+                hasPendingChanges={false}
                 onReset={vi.fn()}
                 onRefresh={vi.fn()}
             />
@@ -305,6 +321,8 @@ describe('FilterBar', () => {
                 onRefreshFromMonthChange={vi.fn()}
                 onRefreshSourcesChange={vi.fn()}
                 onChange={onChange}
+                onApply={vi.fn()}
+                hasPendingChanges={false}
                 onReset={vi.fn()}
                 onRefresh={vi.fn()}
             />
@@ -335,6 +353,8 @@ describe('FilterBar', () => {
                 onRefreshFromMonthChange={vi.fn()}
                 onRefreshSourcesChange={vi.fn()}
                 onChange={onChange}
+                onApply={vi.fn()}
+                hasPendingChanges={false}
                 onReset={vi.fn()}
                 onRefresh={vi.fn()}
             />
@@ -368,6 +388,8 @@ describe('FilterBar', () => {
                 onRefreshFromMonthChange={vi.fn()}
                 onRefreshSourcesChange={vi.fn()}
                 onChange={onChange}
+                onApply={vi.fn()}
+                hasPendingChanges={false}
                 onReset={vi.fn()}
                 onRefresh={vi.fn()}
             />
@@ -402,6 +424,8 @@ describe('FilterBar', () => {
                 onRefreshFromMonthChange={vi.fn()}
                 onRefreshSourcesChange={vi.fn()}
                 onChange={onChange}
+                onApply={vi.fn()}
+                hasPendingChanges={false}
                 onReset={vi.fn()}
                 onRefresh={vi.fn()}
             />
@@ -412,5 +436,35 @@ describe('FilterBar', () => {
             ...emptyFilters,
             has_note: true
         })
+    })
+
+    it('点击应用筛选应触发 onApply', async () => {
+        const onApply = vi.fn()
+        const user = userEvent.setup()
+
+        render(
+            <FilterBar
+                options={options}
+                consulateGroups={groups}
+                filters={emptyFilters}
+                refreshFromMonth=""
+                refreshSources={['monthly_track']}
+                availableRefreshSources={options.fetch_sources}
+                defaultRefreshMonths={6}
+                showConsulateGroups={true}
+                isRefreshing={false}
+                refreshFeedback={null}
+                onRefreshFromMonthChange={vi.fn()}
+                onRefreshSourcesChange={vi.fn()}
+                onChange={vi.fn()}
+                onApply={onApply}
+                hasPendingChanges={true}
+                onReset={vi.fn()}
+                onRefresh={vi.fn()}
+            />
+        )
+
+        await user.click(screen.getByRole('button', { name: '应用筛选' }))
+        expect(onApply).toHaveBeenCalledTimes(1)
     })
 })

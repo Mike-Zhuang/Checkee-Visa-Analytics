@@ -1,4 +1,4 @@
-import type { CaseItem } from '../types'
+import type { CaseItem, CaseSortBy, CaseSortOrder } from '../types'
 import { useTranslation } from 'react-i18next'
 
 import { frontendConfig } from '../config'
@@ -8,6 +8,12 @@ type Props = {
     total: number
     page: number
     pageSize: number
+    localHasNoteOnly: boolean
+    onLocalHasNoteOnlyChange: (value: boolean) => void
+    sortBy: CaseSortBy
+    sortOrder: CaseSortOrder
+    onSortByChange: (value: CaseSortBy) => void
+    onSortOrderChange: (value: CaseSortOrder) => void
     onPageChange: (page: number) => void
     onPageSizeChange: (size: number) => void
 }
@@ -17,7 +23,20 @@ type NoteTimelineItem = {
     date: string
 }
 
-export default function CaseTable({ rows, total, page, pageSize, onPageChange, onPageSizeChange }: Props) {
+export default function CaseTable({
+    rows,
+    total,
+    page,
+    pageSize,
+    localHasNoteOnly,
+    onLocalHasNoteOnlyChange,
+    sortBy,
+    sortOrder,
+    onSortByChange,
+    onSortOrderChange,
+    onPageChange,
+    onPageSizeChange
+}: Props) {
     const { t } = useTranslation()
     const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
@@ -83,6 +102,43 @@ export default function CaseTable({ rows, total, page, pageSize, onPageChange, o
             <div className="panel-head">
                 <h3 id="cases-title">{t('cases.title')}</h3>
                 <p>{t('cases.summary', { count: rows.length, total })}</p>
+            </div>
+            <div className="cases-toolbar">
+                <label className="checkbox-item note-filter-toggle" htmlFor="cases-note-only">
+                    <input
+                        id="cases-note-only"
+                        type="checkbox"
+                        checked={localHasNoteOnly}
+                        onChange={(e) => onLocalHasNoteOnlyChange(e.currentTarget.checked)}
+                    />
+                    <span>{t('cases.localHasNoteOnly')}</span>
+                </label>
+                <div className="cases-sorters">
+                    <label className="field field-inline" htmlFor="cases-sort-by">
+                        <span>{t('cases.sortBy')}</span>
+                        <select
+                            id="cases-sort-by"
+                            className="select-modern"
+                            value={sortBy}
+                            onChange={(e) => onSortByChange(e.currentTarget.value as CaseSortBy)}
+                        >
+                            <option value="check_date">{t('cases.sortByCheckDate')}</option>
+                            <option value="complete_date">{t('cases.sortByCompleteDate')}</option>
+                        </select>
+                    </label>
+                    <label className="field field-inline" htmlFor="cases-sort-order">
+                        <span>{t('cases.sortOrder')}</span>
+                        <select
+                            id="cases-sort-order"
+                            className="select-modern"
+                            value={sortOrder}
+                            onChange={(e) => onSortOrderChange(e.currentTarget.value as CaseSortOrder)}
+                        >
+                            <option value="desc">{t('cases.sortOrderDesc')}</option>
+                            <option value="asc">{t('cases.sortOrderAsc')}</option>
+                        </select>
+                    </label>
+                </div>
             </div>
 
             {total === 0 ? (

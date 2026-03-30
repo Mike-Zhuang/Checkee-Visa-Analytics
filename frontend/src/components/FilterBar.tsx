@@ -18,6 +18,8 @@ type Props = {
     onRefreshFromMonthChange: (value: string) => void
     onRefreshSourcesChange: (value: string[]) => void
     onChange: (next: Filters) => void
+    onApply: () => void
+    hasPendingChanges: boolean
     onReset: () => void
     onRefresh: (payload: RefreshPayload) => void
 }
@@ -164,6 +166,8 @@ export default function FilterBar({
     onRefreshFromMonthChange,
     onRefreshSourcesChange,
     onChange,
+    onApply,
+    hasPendingChanges,
     onReset,
     onRefresh
 }: Props) {
@@ -365,6 +369,9 @@ export default function FilterBar({
                         </fieldset>
 
                         <div className="actions compact refresh-actions">
+                            <button type="button" className="ghost" disabled={!hasPendingChanges || isRefreshing} onClick={onApply}>
+                                {t('filter.apply')}
+                            </button>
                             <button
                                 type="button"
                                 disabled={isRefreshing || refreshSources.length === 0}
@@ -391,6 +398,7 @@ export default function FilterBar({
                 </div>
             ) : (
                 <div className="actions compact filter-only-actions filter-motion-item motion-1">
+                    <button type="button" disabled={!hasPendingChanges} onClick={onApply}>{t('filter.apply')}</button>
                     <button type="button" className="ghost" onClick={onReset}>{t('filter.reset')}</button>
                 </div>
             )}

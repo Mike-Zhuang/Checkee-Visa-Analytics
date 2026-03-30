@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
     exportCasesUrl,
@@ -28,6 +28,8 @@ import StatCards from './components/StatCards'
 import AnomalyTable from './components/AnomalyTable'
 import type {
     AnomalyItem,
+    CaseSortBy,
+    CaseSortOrder,
     CaseItem,
     CohortItem,
     ComparisonData,
@@ -100,10 +102,13 @@ function detectGlassTier(): GlassTier {
 export default function App() {
     const { t, i18n } = useTranslation()
     const [initialized, setInitialized] = useState(false)
+    const hasBootstrappedOverviewRef = useRef(false)
+    const hasBootstrappedCasesRef = useRef(false)
     const [overviewLoading, setOverviewLoading] = useState(false)
     const [casesLoading, setCasesLoading] = useState(false)
     const [errors, setErrors] = useState<Partial<Record<ErrorKey, string>>>({})
-    const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
+    const [draftFilters, setDraftFilters] = useState<Filters>(EMPTY_FILTERS)
+    const [appliedFilters, setAppliedFilters] = useState<Filters>(EMPTY_FILTERS)
     const [refreshFromMonth, setRefreshFromMonth] = useState('')
     const [refreshSources, setRefreshSources] = useState<string[]>(['monthly_track'])
     const [isRefreshing, setIsRefreshing] = useState(false)
@@ -136,6 +141,9 @@ export default function App() {
     const [caseTotal, setCaseTotal] = useState(0)
     const [page, setPage] = useState(1)
     const [pageSize, setPageSize] = useState(frontendConfig.defaultPageSize)
+    const [localCaseHasNoteOnly, setLocalCaseHasNoteOnly] = useState(false)
+    const [caseSortBy, setCaseSortBy] = useState<CaseSortBy>('check_date')
+    const [caseSortOrder, setCaseSortOrder] = useState<CaseSortOrder>('desc')
     const [glassTier, setGlassTier] = useState<GlassTier>(() => detectGlassTier())
 
     useEffect(() => {
@@ -186,9 +194,16 @@ export default function App() {
         return source
     }
 
+    const mergeCaseFilters = (baseFilters: Filters, localHasNoteOnly: boolean): Filters => {
+        if (!localHasNoteOnly || baseFilters.has_note) {
+            return baseFilters
+        }
+        return { ...baseFilters, has_note: true }
+    }
+
     const fetchOverviewBundle = async (activeFilters: Filters) => {
         setOverviewLoading(true)
-        clearErrors(['overview', 'monthly', 'sensitivity', 'cohorts', 'distribution', 'comparison', 'anomalies', 'metaState'])
+        clearErrors(['overview', 'monthly', 'sensitivity', 'cohorts', 'distribution', 'comparison', 'anomalies'])
 
         const [
             overviewRes,
@@ -197,8 +212,7 @@ export default function App() {
             cohortsRes,
             distributionRes,
             comparisonRes,
-            anomaliesRes,
-            stateRes
+            anomaliesRes
         ] = await Promise.allSettled([
             getOverview(activeFilters),
             getMonthly(activeFilters),
@@ -206,8 +220,7 @@ export default function App() {
             getCohorts(activeFilters),
             getDistribution(activeFilters),
             getComparison(activeFilters),
-            getAnomalies(activeFilters),
-            getMetaState()
+            getAnomalies(activeFilters)
         ])
 
         if (overviewRes.status === 'fulfilled') {
@@ -252,20 +265,20 @@ export default function App() {
             setError('anomalies', t('errors.anomalies', { message: formatReason(anomaliesRes.reason) }))
         }
 
-        if (stateRes.status === 'fulfilled') {
-            setMetaState(stateRes.value)
-        } else {
-            setError('metaState', t('errors.metaState', { message: formatReason(stateRes.reason) }))
-        }
-
         setOverviewLoading(false)
     }
 
-    const fetchCasesPage = async (activeFilters: Filters, nextPage: number, nextPageSize: number) => {
+    const fetchCasesPage = async (
+        activeFilters: Filters,
+        nextPage: number,
+        nextPageSize: number,
+        sortBy: CaseSortBy,
+        sortOrder: CaseSortOrder
+    ) => {
         setCasesLoading(true)
         try {
             const offset = (nextPage - 1) * nextPageSize
-            const ca = await getCases(activeFilters, nextPageSize, offset)
+            const ca = await getCases(activeFilters, nextPageSize, offset, sortBy, sortOrder)
             setCases(ca.items)
             setCaseTotal(ca.total)
             clearErrors(['cases'])
@@ -283,7 +296,7 @@ export default function App() {
             getMetaState()
         ])
 
-        clearErrors(['options', 'groups'])
+        clearErrors(['options', 'groups', 'metaState'])
         if (optionsRes.status === 'fulfilled') {
             setOptions(optionsRes.value)
             setRefreshSources((prev) => {
@@ -306,14 +319,22 @@ export default function App() {
 
         if (stateRes.status === 'fulfilled') {
             setMetaState(stateRes.value)
+        } else {
+            setError('metaState', t('errors.metaState', { message: formatReason(stateRes.reason) }))
         }
     }
 
     const init = async () => {
         setErrors({})
         await fetchMetaOptions()
-        await fetchOverviewBundle(filters)
-        await fetchCasesPage(filters, 1, pageSize)
+        await fetchCasesPage(
+            mergeCaseFilters(appliedFilters, localCaseHasNoteOnly),
+            1,
+            pageSize,
+            caseSortBy,
+            caseSortOrder
+        )
+        void fetchOverviewBundle(appliedFilters)
         setInitialized(true)
     }
 
@@ -324,16 +345,28 @@ export default function App() {
 
     useEffect(() => {
         if (!initialized) return
-        setPage(1)
-        void fetchOverviewBundle(filters)
+        if (!hasBootstrappedOverviewRef.current) {
+            hasBootstrappedOverviewRef.current = true
+            return
+        }
+        void fetchOverviewBundle(appliedFilters)
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filters])
+    }, [appliedFilters, initialized])
+
+    const caseFilters = useMemo(
+        () => mergeCaseFilters(appliedFilters, localCaseHasNoteOnly),
+        [appliedFilters, localCaseHasNoteOnly]
+    )
 
     useEffect(() => {
         if (!initialized) return
-        void fetchCasesPage(filters, page, pageSize)
+        if (!hasBootstrappedCasesRef.current) {
+            hasBootstrappedCasesRef.current = true
+            return
+        }
+        void fetchCasesPage(caseFilters, page, pageSize, caseSortBy, caseSortOrder)
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filters, page, pageSize, initialized])
+    }, [caseFilters, page, pageSize, caseSortBy, caseSortOrder, initialized])
 
     const onRefresh = async (payload: RefreshPayload) => {
         setIsRefreshing(true)
@@ -342,8 +375,8 @@ export default function App() {
             await refreshData(payload)
             await fetchMetaOptions()
             setPage(1)
-            await fetchOverviewBundle(filters)
-            await fetchCasesPage(filters, 1, pageSize)
+            await fetchOverviewBundle(appliedFilters)
+            await fetchCasesPage(caseFilters, 1, pageSize, caseSortBy, caseSortOrder)
             clearErrors(['refresh'])
             setRefreshFeedback({ kind: 'success', message: t('filter.refreshSuccess') })
         } catch (e) {
@@ -354,12 +387,28 @@ export default function App() {
         }
     }
 
-    const onFilterChange = (next: Filters) => {
-        setFilters(next)
+    const onFilterDraftChange = (next: Filters) => {
+        setDraftFilters(next)
     }
 
-    const reportLink = useMemo(() => exportReportUrl(filters), [filters])
-    const casesLink = useMemo(() => exportCasesUrl(filters), [filters])
+    const onApplyFilters = () => {
+        setPage(1)
+        setAppliedFilters(draftFilters)
+    }
+
+    const onResetFilters = () => {
+        setPage(1)
+        setDraftFilters(EMPTY_FILTERS)
+        setAppliedFilters(EMPTY_FILTERS)
+    }
+
+    const hasPendingFilterChanges = useMemo(
+        () => JSON.stringify(draftFilters) !== JSON.stringify(appliedFilters),
+        [draftFilters, appliedFilters]
+    )
+
+    const reportLink = useMemo(() => exportReportUrl(appliedFilters), [appliedFilters])
+    const casesLink = useMemo(() => exportCasesUrl(appliedFilters), [appliedFilters])
 
     const freshnessHint = useMemo(() => {
         if (!metaState?.updated_at) return t('app.noRefresh')
@@ -463,7 +512,7 @@ export default function App() {
             <FilterBar
                 options={options}
                 consulateGroups={consulateGroups}
-                filters={filters}
+                filters={draftFilters}
                 refreshFromMonth={refreshFromMonth}
                 refreshSources={refreshSources}
                 availableRefreshSources={options.fetch_sources}
@@ -474,8 +523,10 @@ export default function App() {
                 refreshFeedback={refreshFeedback}
                 onRefreshFromMonthChange={setRefreshFromMonth}
                 onRefreshSourcesChange={setRefreshSources}
-                onChange={onFilterChange}
-                onReset={() => setFilters(EMPTY_FILTERS)}
+                onChange={onFilterDraftChange}
+                onApply={onApplyFilters}
+                hasPendingChanges={hasPendingFilterChanges}
+                onReset={onResetFilters}
                 onRefresh={onRefresh}
             />
 
@@ -483,7 +534,10 @@ export default function App() {
             <MonthlyChart
                 data={monthly}
                 onSelectMonth={(month) => {
-                    setFilters((old) => ({ ...old, months: [month] }))
+                    const nextFilters = { ...appliedFilters, months: [month] }
+                    setPage(1)
+                    setDraftFilters(nextFilters)
+                    setAppliedFilters(nextFilters)
                 }}
             />
             {frontendConfig.enableSensitivity ? <SensitivityTable rows={sensitivity} /> : null}
@@ -496,6 +550,18 @@ export default function App() {
                 total={caseTotal}
                 page={page}
                 pageSize={pageSize}
+                localHasNoteOnly={localCaseHasNoteOnly}
+                onLocalHasNoteOnlyChange={setLocalCaseHasNoteOnly}
+                sortBy={caseSortBy}
+                sortOrder={caseSortOrder}
+                onSortByChange={(value) => {
+                    setPage(1)
+                    setCaseSortBy(value)
+                }}
+                onSortOrderChange={(value) => {
+                    setPage(1)
+                    setCaseSortOrder(value)
+                }}
                 onPageChange={(next) => setPage(Math.max(1, next))}
                 onPageSizeChange={(size) => {
                     setPage(1)

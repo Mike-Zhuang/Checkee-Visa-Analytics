@@ -70,6 +70,38 @@ def test_cases_has_note_filter(client, seed_cases) -> None:
     assert all(str(item.get("detail_note") or "").strip() for item in payload["items"])
 
 
+def test_cases_sort_by_check_date_desc(client, seed_cases) -> None:
+    response = client.get(
+        "/api/v1/cases",
+        params={"sort_by": "check_date", "sort_order": "desc", "limit": 10},
+    )
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert [item["case_number"] for item in items] == ["A002", "A001", "A003", "A004"]
+
+
+def test_cases_sort_by_complete_date_desc_puts_empty_to_end(client, seed_cases) -> None:
+    response = client.get(
+        "/api/v1/cases",
+        params={"sort_by": "complete_date", "sort_order": "desc", "limit": 10},
+    )
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert [item["case_number"] for item in items[:2]] == ["A002", "A001"]
+    assert [item["case_number"] for item in items[2:]] == ["A003", "A004"]
+
+
+def test_cases_sort_by_complete_date_asc(client, seed_cases) -> None:
+    response = client.get(
+        "/api/v1/cases",
+        params={"sort_by": "complete_date", "sort_order": "asc", "limit": 10},
+    )
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert [item["case_number"] for item in items[:2]] == ["A001", "A002"]
+    assert [item["case_number"] for item in items[2:]] == ["A003", "A004"]
+
+
 def test_overview_stats(client, seed_cases) -> None:
     response = client.get("/api/v1/stats/overview")
     assert response.status_code == 200

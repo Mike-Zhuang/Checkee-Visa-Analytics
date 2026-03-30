@@ -3,18 +3,29 @@ import { useTranslation } from 'react-i18next'
 
 import {
     deleteAdminMajorOverride,
+    getAdminAsyncRefreshState,
+    getAdminDetailEnrichmentState,
     getAdminMajorClassifications,
     getAdminSession,
     getMetaState,
     getOptions,
     loginAdmin,
     logoutAdmin,
-    refreshDataWithSession,
     saveAdminMajorOverrides,
+    startAdminAsyncRefresh,
+    startAdminDetailEnrichment,
     triggerAdminStaleRefresh
 } from './api'
 import { frontendConfig } from './config'
-import type { MajorClassificationItem, MetaState, OptionsResponse, RefreshHistoryItem, RefreshPayload } from './types'
+import type {
+    AsyncRefreshJobState,
+    DetailEnrichmentState,
+    MajorClassificationItem,
+    MetaState,
+    OptionsResponse,
+    RefreshHistoryItem,
+    RefreshPayload
+} from './types'
 
 const EMPTY_OPTIONS: OptionsResponse = {
     months: [],
@@ -79,8 +90,11 @@ export default function AdminPage() {
     const [options, setOptions] = useState<OptionsResponse>(EMPTY_OPTIONS)
     const [isLoading, setIsLoading] = useState(false)
     const [isRefreshing, setIsRefreshing] = useState(false)
+    const [isEnriching, setIsEnriching] = useState(false)
     const [loadError, setLoadError] = useState<string | null>(null)
     const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
+    const [refreshJobState, setRefreshJobState] = useState<AsyncRefreshJobState | null>(null)
+    const [detailEnrichmentState, setDetailEnrichmentState] = useState<DetailEnrichmentState | null>(null)
     const [majorFeedback, setMajorFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
     const [majorSearch, setMajorSearch] = useState('')
     const [majorItems, setMajorItems] = useState<MajorClassificationItem[]>([])
@@ -182,6 +196,8 @@ export default function AdminPage() {
 
         if (stateRes.status === 'fulfilled') {
             setMetaState(stateRes.value)
+            setRefreshJobState((stateRes.value.refresh_job as AsyncRefreshJobState | undefined) ?? null)
+            setDetailEnrichmentState((stateRes.value.detail_enrichment as DetailEnrichmentState | undefined) ?? null)
         } else {
             setLoadError(t('admin.loadFailed'))
         }
@@ -258,6 +274,40 @@ export default function AdminPage() {
         sources: refreshSources
     })
 
+    const sleep = (ms: number) => new Promise((resolve) => {
+        window.setTimeout(resolve, ms)
+    })
+
+    const pollAdminRefreshUntilFinished = useCallback(async (token: string): Promise<AsyncRefreshJobState | null> => {
+        let latestState: AsyncRefreshJobState | null = null
+        for (let index = 0; index < 80; index += 1) {
+            const nextState = await getAdminAsyncRefreshState(token)
+            latestState = nextState
+            setRefreshJobState(nextState)
+            const status = String(nextState.status || '')
+            if (status === 'completed' || status === 'failed') {
+                return nextState
+            }
+            await sleep(1500)
+        }
+        return latestState
+    }, [])
+
+    const pollDetailEnrichmentUntilSettled = useCallback(async (token: string): Promise<DetailEnrichmentState | null> => {
+        let latestState: DetailEnrichmentState | null = null
+        for (let index = 0; index < 80; index += 1) {
+            const nextState = await getAdminDetailEnrichmentState(token)
+            latestState = nextState
+            setDetailEnrichmentState(nextState)
+            const status = String(nextState.status || '')
+            if (status === 'completed' || status === 'failed') {
+                return nextState
+            }
+            await sleep(1500)
+        }
+        return latestState
+    }, [])
+
     const onAdminRefresh = async (overridePayload?: RefreshPayload) => {
         if (!adminToken.trim()) {
             setFeedback({ kind: 'error', message: t('admin.loginRequired') })
@@ -274,9 +324,27 @@ export default function AdminPage() {
         setIsRefreshing(true)
         setFeedback(null)
         try {
-            await refreshDataWithSession(payload, adminToken)
+            const started = await startAdminAsyncRefresh(payload, adminToken)
+            setRefreshJobState(started.state ?? null)
+            if (!started.started && String(started.state?.status || '') === 'running') {
+                setFeedback({ kind: 'success', message: t('admin.asyncRefreshAlreadyRunning') })
+            }
+
+            const finalState = await pollAdminRefreshUntilFinished(adminToken)
             await loadMetaAndOptions()
-            setFeedback({ kind: 'success', message: t('admin.refreshSuccess') })
+
+            const finalStatus = String(finalState?.status || '')
+            if (finalStatus === 'completed') {
+                setFeedback({ kind: 'success', message: t('admin.refreshSuccess') })
+                return
+            }
+            if (finalStatus === 'failed') {
+                const lastError = String(finalState?.last_error || '').trim()
+                const suffix = lastError ? `: ${lastError}` : ''
+                setFeedback({ kind: 'error', message: `${t('admin.refreshFailed')}${suffix}` })
+                return
+            }
+            setFeedback({ kind: 'error', message: t('admin.asyncRefreshPollingTimeout') })
         } catch (error) {
             const message = error instanceof Error ? error.message : t('admin.refreshFailed')
             if (message.includes('401') || message.includes('403')) {
@@ -286,6 +354,59 @@ export default function AdminPage() {
             setFeedback({ kind: 'error', message: `${t('admin.refreshFailed')}: ${message}` })
         } finally {
             setIsRefreshing(false)
+        }
+    }
+
+    const onTriggerDetailEnrichment = async () => {
+        if (!adminToken.trim()) {
+            setFeedback({ kind: 'error', message: t('admin.loginRequired') })
+            return
+        }
+
+        setIsEnriching(true)
+        setFeedback(null)
+        try {
+            const started = await startAdminDetailEnrichment(adminToken)
+            setDetailEnrichmentState(started.state ?? null)
+
+            const startedStatus = String(started.status || started.state?.status || '')
+            if (startedStatus === 'completed' && Number(started.state?.candidate_count || 0) === 0) {
+                setFeedback({ kind: 'success', message: t('admin.detailNoCandidates') })
+                await loadMetaAndOptions()
+                return
+            }
+
+            const finalState = await pollDetailEnrichmentUntilSettled(adminToken)
+            await loadMetaAndOptions()
+
+            const finalStatus = String(finalState?.status || '')
+            if (finalStatus === 'completed') {
+                setFeedback({
+                    kind: 'success',
+                    message: t('admin.detailCompleted', {
+                        updated: Number(finalState?.updated_count || 0),
+                        processed: Number(finalState?.processed_count || 0)
+                    })
+                })
+                return
+            }
+            if (finalStatus === 'failed') {
+                const lastError = String(finalState?.last_error || '').trim()
+                const suffix = lastError ? `: ${lastError}` : ''
+                setFeedback({ kind: 'error', message: `${t('admin.detailFailed')}${suffix}` })
+                return
+            }
+            setFeedback({ kind: 'error', message: t('admin.detailPollingTimeout') })
+        } catch (error) {
+            const message = error instanceof Error ? error.message : t('admin.detailFailed')
+            if (message.includes('401') || message.includes('403')) {
+                clearAdminSession()
+                setAuthError(t('admin.sessionExpired'))
+                return
+            }
+            setFeedback({ kind: 'error', message: `${t('admin.detailFailed')}: ${message}` })
+        } finally {
+            setIsEnriching(false)
         }
     }
 
@@ -656,6 +777,23 @@ export default function AdminPage() {
         }).format(date)
     }, [languageValue, sessionExpiresAt])
 
+    const refreshJobStatusText = useMemo(() => {
+        const status = String(refreshJobState?.status || metaState?.refresh_job?.status || 'idle')
+        if (status === 'started') return t('admin.asyncStatusStarted')
+        if (status === 'running') return t('admin.asyncStatusRunning')
+        if (status === 'completed') return t('admin.asyncStatusCompleted')
+        if (status === 'failed') return t('admin.asyncStatusFailed')
+        return t('admin.asyncStatusIdle')
+    }, [metaState?.refresh_job?.status, refreshJobState?.status, t])
+
+    const detailEnrichmentStatusText = useMemo(() => {
+        const status = String(detailEnrichmentState?.status || metaState?.detail_enrichment?.status || 'idle')
+        if (status === 'running') return t('admin.detailStatusRunning')
+        if (status === 'completed') return t('admin.detailStatusCompleted')
+        if (status === 'failed') return t('admin.detailStatusFailed')
+        return t('admin.detailStatusIdle')
+    }, [detailEnrichmentState?.status, metaState?.detail_enrichment?.status, t])
+
     return (
         <main className={`app-shell glass-tier-${glassTier} admin-shell`}>
             <header className="hero">
@@ -732,7 +870,7 @@ export default function AdminPage() {
                             id="admin-refresh-from-month"
                             type="month"
                             value={refreshFromMonth}
-                            disabled={showLoginGate || isRefreshing}
+                            disabled={showLoginGate || isRefreshing || isEnriching}
                             onChange={(e) => setRefreshFromMonth(e.currentTarget.value)}
                         />
                         <small className="field-help">
@@ -759,7 +897,7 @@ export default function AdminPage() {
                                 <input
                                     type="checkbox"
                                     checked={refreshSources.includes(source)}
-                                    disabled={showLoginGate || isRefreshing}
+                                    disabled={showLoginGate || isRefreshing || isEnriching}
                                     onChange={() => toggleSource(source)}
                                 />
                                 <span className="source-title">{sourceName(source)}</span>
@@ -769,22 +907,42 @@ export default function AdminPage() {
                 </fieldset>
 
                 <div className="actions">
-                    <button type="button" disabled={isLoading || isRefreshing || showLoginGate} onClick={() => void onAdminRefresh()}>
+                    <button
+                        type="button"
+                        disabled={isLoading || isRefreshing || isEnriching || showLoginGate}
+                        onClick={() => void onAdminRefresh()}
+                    >
                         {isRefreshing ? t('filter.refreshing') : t('admin.refreshNow')}
                     </button>
                     <button
                         type="button"
                         className="ghost"
-                        disabled={isLoading || isRefreshing || showLoginGate || !lastAttemptPayload}
+                        disabled={isLoading || isRefreshing || isEnriching || showLoginGate || !lastAttemptPayload}
                         onClick={() => void onAdminRefresh(lastAttemptPayload ?? undefined)}
                     >
                         {t('admin.retryLast')}
                     </button>
-                    <button type="button" className="ghost" disabled={showLoginGate} onClick={() => void onLogout()}>
+                    <button type="button" className="ghost" disabled={showLoginGate || isEnriching || isRefreshing} onClick={() => void onLogout()}>
                         {t('admin.logout')}
                     </button>
-                    <button type="button" className="ghost" disabled={isLoading || isRefreshing} onClick={() => void loadMetaAndOptions()}>
+                    <button
+                        type="button"
+                        className="ghost"
+                        disabled={isLoading || isRefreshing || isEnriching}
+                        onClick={() => void loadMetaAndOptions()}
+                    >
                         {t('admin.reloadState')}
+                    </button>
+                </div>
+
+                <div className="actions compact">
+                    <button
+                        type="button"
+                        className="ghost"
+                        disabled={showLoginGate || isRefreshing || isEnriching}
+                        onClick={() => void onTriggerDetailEnrichment()}
+                    >
+                        {isEnriching ? t('admin.detailEnriching') : t('admin.detailEnrichNow')}
                     </button>
                 </div>
 
@@ -803,6 +961,12 @@ export default function AdminPage() {
                             : t('common.na')
                     })}</span>
                     <span>{t('admin.refreshInterval', { seconds: metaState?.refresh_min_interval_seconds ?? 0 })}</span>
+                    <span>{t('admin.asyncRefreshStatus', { value: refreshJobStatusText })}</span>
+                    <span>{t('admin.detailStatus', { value: detailEnrichmentStatusText })}</span>
+                    <span>{t('admin.detailProgress', {
+                        processed: Number(detailEnrichmentState?.processed_count ?? metaState?.detail_enrichment?.processed_count ?? 0),
+                        candidate: Number(detailEnrichmentState?.candidate_count ?? metaState?.detail_enrichment?.candidate_count ?? 0)
+                    })}</span>
                 </div>
 
                 <div className="admin-history">
