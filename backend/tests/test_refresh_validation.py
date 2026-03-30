@@ -70,6 +70,48 @@ def test_refresh_success_payload(client, monkeypatch) -> None:
     assert captured["triggered_by"] == "manual"
 
 
+def test_refresh_prefers_admin_key_trigger_label_when_both_headers_present(client, monkeypatch) -> None:
+    from app.api import routes
+
+    monkeypatch.setattr(routes, "REFRESH_REQUIRE_ADMIN_KEY", False)
+    monkeypatch.setattr(routes, "get_session_expiry", lambda token: datetime.now())
+
+    captured: dict[str, str] = {}
+
+    def fake_refresh(
+        *,
+        all_months: bool,
+        months: int,
+        from_month: str | None,
+        sources: list[str] | None,
+        triggered_by: str,
+    ):
+        captured["triggered_by"] = triggered_by
+        return {
+            "success": True,
+            "message": "refresh completed",
+            "fetched_months": ["2026-03"],
+            "total_cases": 10,
+            "selected_sources": ["monthly_track"],
+            "truncated_by_limit": False,
+            "month_limit": 120,
+            "generated_at": datetime.now(),
+        }
+
+    monkeypatch.setattr(routes.service, "refresh", fake_refresh)
+
+    response = client.post(
+        "/api/v1/tasks/refresh",
+        json={"months": 2},
+        headers={
+            "X-Admin-Key": "scheduler-key",
+            "Authorization": "Bearer admin-session-token",
+        },
+    )
+    assert response.status_code == 200
+    assert captured["triggered_by"] == "scheduled"
+
+
 def test_refresh_unsupported_sources_returns_400(client, monkeypatch) -> None:
     from app.api import routes
 

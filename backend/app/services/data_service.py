@@ -2,12 +2,18 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime
-from threading import RLock
+from threading import RLock, Thread
 from typing import Any
 
-from app.core.config import MAX_FETCH_MONTHS, REFRESH_MIN_INTERVAL_SECONDS
+from app.core.config import DETAIL_FETCH_SYNC_ON_REFRESH, MAX_FETCH_MONTHS, REFRESH_MIN_INTERVAL_SECONDS
 from app.services import analytics, major_classifier
-from app.services.scraper import CaseRow, FetchResult, fetch_cases, list_supported_sources
+from app.services.scraper import (
+    CaseRow,
+    FetchResult,
+    enrich_missing_details_for_payload_rows,
+    fetch_cases,
+    list_supported_sources,
+)
 from app.services.storage import (
     load_cases,
     load_major_overrides,
@@ -32,6 +38,7 @@ class RefreshRateLimitError(ValueError):
 class DataService:
     def __init__(self) -> None:
         self._lock = RLock()
+        self._detail_enrichment_running = False
 
     @staticmethod
     def _row_identity(row: dict[str, Any]) -> str:
@@ -118,6 +125,110 @@ class DataService:
         if rows:
             save_cases(rows)
         return metrics
+
+    def _apply_detail_updates_by_identity(
+        self,
+        rows: list[dict[str, Any]],
+        updates_by_identity: dict[str, dict[str, str]],
+    ) -> int:
+        updated_count = 0
+        for row in rows:
+            identity = self._row_identity(row)
+            update = updates_by_identity.get(identity)
+            if not update:
+                continue
+
+            changed = False
+            for field in ("detail_employer", "detail_note", "detail_city", "detail_state"):
+                current_value = str(row.get(field) or "").strip()
+                if current_value:
+                    continue
+                next_value = str(update.get(field) or "").strip()
+                if not next_value:
+                    continue
+                row[field] = next_value
+                changed = True
+
+            if changed:
+                updated_count += 1
+        return updated_count
+
+    def _run_detail_enrichment_job(self) -> None:
+        try:
+            snapshot_rows = load_cases()
+            if not snapshot_rows:
+                return
+
+            snapshot_copy = [dict(row) for row in snapshot_rows]
+            metrics = enrich_missing_details_for_payload_rows(snapshot_copy)
+            updates_by_identity = {
+                self._row_identity(row): {
+                    "detail_employer": str(row.get("detail_employer") or ""),
+                    "detail_note": str(row.get("detail_note") or ""),
+                    "detail_city": str(row.get("detail_city") or ""),
+                    "detail_state": str(row.get("detail_state") or ""),
+                }
+                for row in snapshot_copy
+            }
+
+            with self._lock:
+                current_rows = load_cases()
+                updated_count = self._apply_detail_updates_by_identity(current_rows, updates_by_identity)
+                if updated_count > 0:
+                    save_cases(current_rows)
+
+                meta = load_meta()
+                save_meta(
+                    {
+                        **meta,
+                        "detail_enrichment": {
+                            "status": "completed",
+                            "finished_at": datetime.now().isoformat(timespec="seconds"),
+                            "updated_row_count": updated_count,
+                            "metrics": metrics,
+                        },
+                    },
+                    update_timestamp=False,
+                )
+        except Exception as exc:  # noqa: BLE001
+            with self._lock:
+                meta = load_meta()
+                save_meta(
+                    {
+                        **meta,
+                        "detail_enrichment": {
+                            "status": "failed",
+                            "finished_at": datetime.now().isoformat(timespec="seconds"),
+                            "error": str(exc),
+                        },
+                    },
+                    update_timestamp=False,
+                )
+        finally:
+            with self._lock:
+                self._detail_enrichment_running = False
+
+    def _start_detail_enrichment_job(self) -> bool:
+        with self._lock:
+            if self._detail_enrichment_running:
+                return False
+            self._detail_enrichment_running = True
+
+            meta = load_meta()
+            save_meta(
+                {
+                    **meta,
+                    "detail_enrichment": {
+                        "status": "running",
+                        "started_at": datetime.now().isoformat(timespec="seconds"),
+                    },
+                },
+                update_timestamp=False,
+            )
+
+        worker = Thread(target=self._run_detail_enrichment_job, daemon=True, name="checkee-detail-enrichment")
+        worker.start()
+        return True
 
     def record_refresh_event(
         self,
@@ -224,6 +335,10 @@ class DataService:
                 }
             )
 
+            detail_enrichment_started = False
+            if bool(fetch_result.coverage.get("detail_deferred")) and not DETAIL_FETCH_SYNC_ON_REFRESH:
+                detail_enrichment_started = self._start_detail_enrichment_job()
+
             return {
                 "success": True,
                 "message": "refresh completed",
@@ -233,6 +348,7 @@ class DataService:
                 "truncated_by_limit": fetch_result.truncated_by_limit,
                 "month_limit": MAX_FETCH_MONTHS,
                 "generated_at": datetime.now(),
+                "detail_enrichment_started": detail_enrichment_started,
             }
 
     def _enforce_refresh_interval(self) -> None:
@@ -321,9 +437,26 @@ class DataService:
         if not rows:
             return rows
 
-        has_full_classification = all(str(row.get("major_category_l1") or "").strip() for row in rows)
-        if not has_full_classification:
-            self._ensure_major_classification(rows)
+        before_snapshot = [
+            (
+                str(row.get("major_category_l1") or "").strip(),
+                str(row.get("major_category_l2") or "").strip(),
+                str(row.get("major_classification_source") or "").strip(),
+            )
+            for row in rows
+        ]
+        self._ensure_major_classification(rows)
+        after_snapshot = [
+            (
+                str(row.get("major_category_l1") or "").strip(),
+                str(row.get("major_category_l2") or "").strip(),
+                str(row.get("major_classification_source") or "").strip(),
+            )
+            for row in rows
+        ]
+        if before_snapshot != after_snapshot:
+            with self._lock:
+                save_cases(rows)
         return rows
 
     def get_overview(self, rows: list[dict[str, str]]) -> dict[str, Any]:
@@ -348,7 +481,31 @@ class DataService:
         return analytics.anomalies(rows, threshold_days=threshold_days, limit=limit)
 
     def get_options(self, rows: list[dict[str, str]]) -> dict[str, Any]:
-        return analytics.options(rows)
+        options_payload = analytics.options(rows)
+        rules = self._taxonomy_rules()
+
+        l1_options = set(options_payload.get("major_categories_l1") or [])
+        l1_options.update(self._taxonomy_l1_options(rules))
+
+        l2_options = set(options_payload.get("major_categories_l2") or [])
+        l2_options.update(self._taxonomy_l2_options(rules))
+
+        mapping_raw = options_payload.get("major_category_mapping") or {}
+        mapping: dict[str, set[str]] = {
+            str(category_l1): {str(item) for item in values}
+            for category_l1, values in mapping_raw.items()
+        }
+
+        for category_l1 in l1_options:
+            mapping.setdefault(category_l1, set()).add(major_classifier.MAJOR_UNSPECIFIED_L2)
+
+        options_payload["major_categories_l1"] = sorted(l1_options)
+        options_payload["major_categories_l2"] = sorted(l2_options)
+        options_payload["major_category_mapping"] = {
+            category_l1: sorted(values)
+            for category_l1, values in sorted(mapping.items(), key=lambda item: item[0])
+        }
+        return options_payload
 
     def get_consulate_groups(self, rows: list[dict[str, str]]) -> dict[str, Any]:
         return analytics.consulate_groups(rows)

@@ -15,6 +15,7 @@ from app.core.config import (
     CHECKEE_BASE_URL,
     DETAIL_FETCH_REQUIRE_NOTE,
     DETAIL_FETCH_SAMPLE_RATIO,
+    DETAIL_FETCH_SYNC_ON_REFRESH,
     FETCH_DELAY_SECONDS,
     MAX_FETCH_MONTHS,
     REQUEST_RETRIES,
@@ -509,6 +510,86 @@ def _enrich_detail_fields(rows: list[CaseRow], session: requests.Session, sample
     return metrics
 
 
+def enrich_missing_details_for_payload_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    candidates: list[tuple[int, CaseRow]] = []
+    for idx, row in enumerate(rows):
+        detail_url = str(row.get("detail_url") or "").strip()
+        if not detail_url:
+            continue
+
+        existing_note = str(row.get("detail_note") or "").strip()
+        if existing_note:
+            continue
+
+        candidates.append(
+            (
+                idx,
+                CaseRow(
+                    source_month=str(row.get("source_month") or ""),
+                    case_number=str(row.get("case_number") or ""),
+                    nickname=str(row.get("nickname") or ""),
+                    visa_type=str(row.get("visa_type") or ""),
+                    visa_entry=str(row.get("visa_entry") or ""),
+                    consulate=str(row.get("consulate") or ""),
+                    major=str(row.get("major") or ""),
+                    status=str(row.get("status") or ""),
+                    check_date=str(row.get("check_date") or ""),
+                    complete_date=str(row.get("complete_date") or ""),
+                    waiting_days_reported=str(row.get("waiting_days_reported") or ""),
+                    waiting_days_calc=str(row.get("waiting_days_calc") or ""),
+                    observed_days=str(row.get("observed_days") or ""),
+                    event=int(row.get("event") or 0),
+                    detail_url=detail_url,
+                    update_url=str(row.get("update_url") or ""),
+                    detail_employer=str(row.get("detail_employer") or ""),
+                    detail_note=existing_note,
+                    detail_city=str(row.get("detail_city") or ""),
+                    detail_state=str(row.get("detail_state") or ""),
+                ),
+            )
+        )
+
+    if not candidates:
+        return {
+            "detail_sample_ratio": round(min(1.0, max(0.0, DETAIL_FETCH_SAMPLE_RATIO)), 4),
+            "detail_require_note": DETAIL_FETCH_REQUIRE_NOTE,
+            "detail_candidate_count": 0,
+            "detail_sampled_count": 0,
+            "detail_skipped_count": 0,
+            "detail_fetch_error_count": 0,
+            "detail_parse_empty_count": 0,
+            "detail_enriched_count": 0,
+            "detail_forbidden_count": 0,
+            "detail_blocked": False,
+            "detail_updated_row_count": 0,
+        }
+
+    session = _session()
+    detail_rows = [item[1] for item in candidates]
+    metrics = _enrich_detail_fields(detail_rows, session, DETAIL_FETCH_SAMPLE_RATIO)
+
+    updated = 0
+    for (idx, enriched) in candidates:
+        updated_this_row = False
+        if not str(rows[idx].get("detail_employer") or "").strip() and enriched.detail_employer:
+            rows[idx]["detail_employer"] = enriched.detail_employer
+            updated_this_row = True
+        if not str(rows[idx].get("detail_note") or "").strip() and enriched.detail_note:
+            rows[idx]["detail_note"] = enriched.detail_note
+            updated_this_row = True
+        if not str(rows[idx].get("detail_city") or "").strip() and enriched.detail_city:
+            rows[idx]["detail_city"] = enriched.detail_city
+            updated_this_row = True
+        if not str(rows[idx].get("detail_state") or "").strip() and enriched.detail_state:
+            rows[idx]["detail_state"] = enriched.detail_state
+            updated_this_row = True
+        if updated_this_row:
+            updated += 1
+
+    metrics["detail_updated_row_count"] = updated
+    return metrics
+
+
 def _dedupe(rows: list[CaseRow]) -> list[CaseRow]:
     latest: dict[str, CaseRow] = {}
 
@@ -586,7 +667,22 @@ def fetch_cases(
         source_case_counts[LATEST_FETCH_SOURCE] = source_case_counts.get(LATEST_FETCH_SOURCE, 0) + len(latest_snapshot_rows)
 
     deduped_rows = _dedupe(rows)
-    detail_coverage = _enrich_detail_fields(deduped_rows, session, DETAIL_FETCH_SAMPLE_RATIO)
+    if DETAIL_FETCH_SYNC_ON_REFRESH:
+        detail_coverage = _enrich_detail_fields(deduped_rows, session, DETAIL_FETCH_SAMPLE_RATIO)
+    else:
+        detail_coverage = {
+            "detail_sample_ratio": round(min(1.0, max(0.0, DETAIL_FETCH_SAMPLE_RATIO)), 4),
+            "detail_require_note": DETAIL_FETCH_REQUIRE_NOTE,
+            "detail_candidate_count": sum(1 for row in deduped_rows if row.detail_url),
+            "detail_sampled_count": 0,
+            "detail_skipped_count": 0,
+            "detail_fetch_error_count": 0,
+            "detail_parse_empty_count": 0,
+            "detail_enriched_count": 0,
+            "detail_forbidden_count": 0,
+            "detail_blocked": False,
+            "detail_deferred": True,
+        }
 
     coverage = {
         "selected_sources": selected_sources,

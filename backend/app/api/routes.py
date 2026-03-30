@@ -92,13 +92,13 @@ def _filtered_rows(
 
 
 def _resolve_refresh_triggered_by(request: Request) -> str:
-    token = _extract_bearer_token(request.headers.get("Authorization"))
-    if token and get_session_expiry(token) is not None:
-        return REFRESH_TRIGGERED_BY_MANUAL
-
     provided_key = request.headers.get("X-Admin-Key", "").strip()
     if provided_key:
         return REFRESH_TRIGGERED_BY_SCHEDULED
+
+    token = _extract_bearer_token(request.headers.get("Authorization"))
+    if token and get_session_expiry(token) is not None:
+        return REFRESH_TRIGGERED_BY_MANUAL
 
     return REFRESH_TRIGGERED_BY_MANUAL
 
