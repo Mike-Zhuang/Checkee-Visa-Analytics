@@ -250,6 +250,53 @@ describe('AdminPage', () => {
         expect(screen.getByRole('columnheader', { name: '来源' })).toHaveClass('admin-col-tertiary')
     })
 
+    it('一级学科仅匹配时应保留 Unspecified 二级可选值', async () => {
+        const user = userEvent.setup()
+        apiMock.loginAdmin.mockResolvedValue({
+            token: 'session-token',
+            expires_at: '2026-03-28T15:58:21.837314Z'
+        })
+        apiMock.getAdminMajorClassifications.mockResolvedValueOnce({
+            total: 1,
+            category_l1_options: ['STEM', 'Other'],
+            category_l2_options: ['AI & Data', 'Engineering'],
+            items: [
+                {
+                    major: 'STEM',
+                    major_normalized: 'stem',
+                    count: 36,
+                    auto_category_l1: 'STEM',
+                    auto_category_l2: 'Unspecified',
+                    effective_category_l1: 'STEM',
+                    effective_category_l2: 'Unspecified',
+                    source: 'auto',
+                    has_manual_override: false,
+                    override_updated_at: null
+                }
+            ]
+        })
+
+        render(<AdminPage />)
+
+        await waitFor(() => {
+            expect(apiMock.getOptions).toHaveBeenCalledTimes(1)
+            expect(apiMock.getMetaState).toHaveBeenCalledTimes(1)
+        })
+
+        await user.type(screen.getByPlaceholderText('请输入管理员密码'), 'Zcb070920!')
+        await user.click(screen.getByRole('button', { name: '登录' }))
+
+        const stemNormalized = await screen.findByText('stem')
+        const row = stemNormalized.closest('tr')
+        expect(row).toBeTruthy()
+        if (!row) {
+            throw new Error('STEM row not found')
+        }
+
+        const selects = within(row).getAllByRole('combobox')
+        expect(selects[1]).toHaveValue('Unspecified')
+    })
+
     it('数据过旧时应触发管理员兜底刷新', async () => {
         const user = userEvent.setup()
         apiMock.getMetaState.mockResolvedValue({

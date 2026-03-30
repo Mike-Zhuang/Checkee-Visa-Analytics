@@ -33,6 +33,7 @@ const EMPTY_OPTIONS: OptionsResponse = {
 }
 
 const ADMIN_STALE_REFRESH_THRESHOLD_SECONDS = 6 * 60 * 60
+const MAJOR_UNSPECIFIED_L2 = 'Unspecified'
 
 type GlassTier = 'full' | 'lite'
 
@@ -401,10 +402,37 @@ export default function AdminPage() {
         [majorCategoryL2Options, options.major_categories_l2, options.major_category_mapping]
     )
 
+    const mergeMajorL2Options = useCallback((base: string[], extras: string[]): string[] => {
+        const merged: string[] = []
+        const seen = new Set<string>()
+        for (const value of [...base, ...extras]) {
+            const normalized = value.trim()
+            if (!normalized || seen.has(normalized)) {
+                continue
+            }
+            seen.add(normalized)
+            merged.push(normalized)
+        }
+        return merged
+    }, [])
+
+    const resolveMajorL2OptionsForRow = useCallback(
+        (categoryL1: string, extras: string[] = []): string[] => {
+            const base = resolveMajorL2Options(categoryL1)
+            return mergeMajorL2Options(base, [...extras, MAJOR_UNSPECIFIED_L2])
+        },
+        [mergeMajorL2Options, resolveMajorL2Options]
+    )
+
     const updateMajorDraft = (row: MajorClassificationItem, next: { category_l1?: string; category_l2?: string }) => {
         const current = rowDraft(row)
         const nextCategoryL1 = next.category_l1 ?? current.category_l1
-        const allowedCategoryL2 = resolveMajorL2Options(nextCategoryL1)
+        const allowedCategoryL2 = resolveMajorL2OptionsForRow(nextCategoryL1, [
+            current.category_l2,
+            next.category_l2 ?? '',
+            row.auto_category_l2,
+            row.effective_category_l2
+        ])
         let nextCategoryL2 = next.category_l2 ?? current.category_l2
         if (!allowedCategoryL2.includes(nextCategoryL2)) {
             nextCategoryL2 = allowedCategoryL2[0] ?? current.category_l2
@@ -874,7 +902,11 @@ export default function AdminPage() {
                                                 const isDirty =
                                                     draft.category_l1 !== row.effective_category_l1
                                                     || draft.category_l2 !== row.effective_category_l2
-                                                const rowCategoryL2Options = resolveMajorL2Options(draft.category_l1)
+                                                const rowCategoryL2Options = resolveMajorL2OptionsForRow(draft.category_l1, [
+                                                    draft.category_l2,
+                                                    row.auto_category_l2,
+                                                    row.effective_category_l2
+                                                ])
 
                                                 rows.push(
                                                     <tr key={row.major_normalized} className={isReadonlyRow ? 'admin-major-row-readonly' : ''}>
