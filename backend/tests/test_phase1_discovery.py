@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import requests
+
 from app.services.data_service import DataService
 import pytest
 
@@ -8,6 +10,7 @@ from app.services.scraper import (
     FetchResult,
     _extract_detail_fields,
     _extract_entry_points,
+    _enrich_detail_fields,
     _normalize_sources,
     list_supported_sources,
 )
@@ -77,6 +80,114 @@ def test_extract_detail_fields_supports_inline_note_cells() -> None:
     assert fields["detail_employer"] == ""
     assert "interview 2.5" in fields["detail_note"]
     assert "issued 3.18" in fields["detail_note"]
+
+
+def test_enrich_detail_fields_force_note_fetch_when_ratio_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [
+        CaseRow(
+            source_month="2026-03",
+            case_number="A001",
+            nickname="alpha",
+            visa_type="F1",
+            visa_entry="I20",
+            consulate="BeiJing",
+            major="CS",
+            status="Pending",
+            check_date="2026-03-01",
+            complete_date="",
+            waiting_days_reported="",
+            waiting_days_calc="",
+            observed_days="10",
+            event=0,
+            detail_url="https://example.com/detail/1",
+            update_url="https://example.com/update/1",
+            detail_employer="",
+            detail_note="",
+            detail_city="",
+            detail_state="",
+        ),
+        CaseRow(
+            source_month="2026-03",
+            case_number="A002",
+            nickname="beta",
+            visa_type="F1",
+            visa_entry="I20",
+            consulate="ShangHai",
+            major="Math",
+            status="Pending",
+            check_date="2026-03-02",
+            complete_date="",
+            waiting_days_reported="",
+            waiting_days_calc="",
+            observed_days="9",
+            event=0,
+            detail_url="https://example.com/detail/2",
+            update_url="https://example.com/update/2",
+            detail_employer="",
+            detail_note="",
+            detail_city="",
+            detail_state="",
+        ),
+    ]
+
+    calls: list[str] = []
+
+    def fake_fetch_html(_session: requests.Session, url: str) -> str:
+        calls.append(url)
+        return """
+        <html><body><table>
+          <tr><td>Note: interview 2.5; issued 3.18</td></tr>
+        </table></body></html>
+        """
+
+    monkeypatch.setattr("app.services.scraper.DETAIL_FETCH_REQUIRE_NOTE", True)
+    monkeypatch.setattr("app.services.scraper._fetch_html", fake_fetch_html)
+
+    metrics = _enrich_detail_fields(rows, requests.Session(), sample_ratio=0.0)
+
+    assert len(calls) == 2
+    assert metrics["detail_candidate_count"] == 2
+    assert metrics["detail_sampled_count"] == 2
+    assert metrics["detail_skipped_count"] == 0
+    assert metrics["detail_enriched_count"] == 2
+    assert metrics["detail_require_note"] is True
+    assert all("issued 3.18" in row.detail_note for row in rows)
+
+
+def test_enrich_detail_fields_respects_sampling_when_force_note_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [
+        CaseRow(
+            source_month="2026-03",
+            case_number="A003",
+            nickname="gamma",
+            visa_type="F1",
+            visa_entry="I20",
+            consulate="GuangZhou",
+            major="Physics",
+            status="Pending",
+            check_date="2026-03-03",
+            complete_date="",
+            waiting_days_reported="",
+            waiting_days_calc="",
+            observed_days="8",
+            event=0,
+            detail_url="https://example.com/detail/3",
+            update_url="https://example.com/update/3",
+            detail_employer="",
+            detail_note="",
+            detail_city="",
+            detail_state="",
+        )
+    ]
+
+    monkeypatch.setattr("app.services.scraper.DETAIL_FETCH_REQUIRE_NOTE", False)
+
+    metrics = _enrich_detail_fields(rows, requests.Session(), sample_ratio=0.0)
+
+    assert metrics["detail_candidate_count"] == 1
+    assert metrics["detail_sampled_count"] == 0
+    assert metrics["detail_skipped_count"] == 1
+    assert metrics["detail_require_note"] is False
 
 
 def test_refresh_writes_source_and_quality_meta(monkeypatch) -> None:

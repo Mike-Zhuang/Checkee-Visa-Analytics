@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 
 from app.core.config import (
     CHECKEE_BASE_URL,
+    DETAIL_FETCH_REQUIRE_NOTE,
     DETAIL_FETCH_SAMPLE_RATIO,
     FETCH_DELAY_SECONDS,
     MAX_FETCH_MONTHS,
@@ -451,18 +452,19 @@ def _should_sample_detail(row: CaseRow, sample_ratio: float) -> bool:
 
 def _enrich_detail_fields(rows: list[CaseRow], session: requests.Session, sample_ratio: float) -> dict[str, Any]:
     ratio = min(1.0, max(0.0, sample_ratio))
+    require_note = DETAIL_FETCH_REQUIRE_NOTE
     metrics: dict[str, Any] = {
         "detail_sample_ratio": round(ratio, 4),
+        "detail_require_note": require_note,
         "detail_candidate_count": 0,
         "detail_sampled_count": 0,
         "detail_skipped_count": 0,
         "detail_fetch_error_count": 0,
         "detail_parse_empty_count": 0,
         "detail_enriched_count": 0,
+        "detail_forbidden_count": 0,
         "detail_blocked": False,
     }
-
-    detail_blocked = False
 
     for row in rows:
         if not row.detail_url:
@@ -470,11 +472,9 @@ def _enrich_detail_fields(rows: list[CaseRow], session: requests.Session, sample
 
         metrics["detail_candidate_count"] += 1
 
-        if detail_blocked:
-            metrics["detail_skipped_count"] += 1
-            continue
-
-        if not _should_sample_detail(row, ratio):
+        # 业务要求：只要有详情页就尽量抓 note，避免采样后长期看不到 note。
+        should_fetch = require_note or _should_sample_detail(row, ratio)
+        if not should_fetch:
             metrics["detail_skipped_count"] += 1
             continue
 
@@ -485,7 +485,7 @@ def _enrich_detail_fields(rows: list[CaseRow], session: requests.Session, sample
         except Exception as exc:  # noqa: BLE001
             metrics["detail_fetch_error_count"] += 1
             if "403" in str(exc):
-                detail_blocked = True
+                metrics["detail_forbidden_count"] += 1
             continue
 
         detail_fields = _extract_detail_fields(detail_html)
@@ -501,7 +501,11 @@ def _enrich_detail_fields(rows: list[CaseRow], session: requests.Session, sample
 
         time.sleep(FETCH_DELAY_SECONDS)
 
-    metrics["detail_blocked"] = detail_blocked
+    metrics["detail_blocked"] = (
+        metrics["detail_sampled_count"] > 0
+        and metrics["detail_enriched_count"] == 0
+        and metrics["detail_forbidden_count"] == metrics["detail_sampled_count"]
+    )
     return metrics
 
 
