@@ -262,12 +262,19 @@ export default function FilterBar({
         ...filters.employers.map((v) => ({ field: 'employers' as const, value: v, label: t('filter.chipEmployer', { value: v }) })),
         ...filters.detail_cities.map((v) => ({ field: 'detail_cities' as const, value: v, label: t('filter.chipDetailCity', { value: v }) })),
         ...filters.detail_states.map((v) => ({ field: 'detail_states' as const, value: v, label: t('filter.chipDetailState', { value: v }) })),
+        ...(filters.has_note
+            ? [{ field: 'has_note' as const, value: 'true', label: t('filter.chipHasNote') }]
+            : []),
         ...(filters.search_text
             ? [{ field: 'search_text' as const, value: filters.search_text, label: t('filter.chipSearch', { value: filters.search_text }) }]
             : [])
     ]
 
     const removeChip = (field: keyof Filters, value: string) => {
+        if (field === 'has_note') {
+            onChange({ ...filters, has_note: false })
+            return
+        }
         if (field === 'search_text') {
             onChange({ ...filters, search_text: '' })
             return
@@ -401,6 +408,15 @@ export default function FilterBar({
                     />
                     <small className="field-help">{t('filter.searchTextHint')}</small>
                 </label>
+                <label className="checkbox-item note-filter-toggle">
+                    <input
+                        type="checkbox"
+                        checked={filters.has_note}
+                        onChange={(e) => onChange({ ...filters, has_note: e.currentTarget.checked })}
+                    />
+                    <span>{t('filter.hasNoteOnly')}</span>
+                </label>
+                <small className="field-help">{t('filter.hasNoteOnlyHint')}</small>
             </div>
 
             <div className="chip-row filter-motion-item motion-3" aria-live="polite">

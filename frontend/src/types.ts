@@ -135,6 +135,7 @@ export type Filters = {
     employers: string[]
     detail_cities: string[]
     detail_states: string[]
+    has_note: boolean
     search_text: string
 }
 

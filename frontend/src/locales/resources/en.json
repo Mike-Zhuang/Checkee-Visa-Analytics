@@ -75,6 +75,8 @@
         "searchText": "Text Search (Note + Employer)",
         "searchTextPlaceholder": "For example: amazon cleared",
         "searchTextHint": "Matches keywords across detail note and employer fields.",
+        "hasNoteOnly": "Only cases with note",
+        "hasNoteOnlyHint": "When enabled, keep only cases whose detail note is not empty.",
         "consulates": "Consulates",
         "consulatesHint": "Compare cases by interview location.",
         "groupedConsulates": "Consulates by country/region",
@@ -105,6 +107,7 @@
         "chipEmployer": "Employer:{{value}}",
         "chipDetailCity": "City:{{value}}",
         "chipDetailState": "State:{{value}}",
+        "chipHasNote": "Has Note Only",
         "chipSearch": "Search:{{value}}",
         "emptyOptions": "No options"
     },

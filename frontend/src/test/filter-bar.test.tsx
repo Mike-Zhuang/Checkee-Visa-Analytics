@@ -41,6 +41,7 @@ const emptyFilters: Filters = {
     employers: [],
     detail_cities: [],
     detail_states: [],
+    has_note: false,
     search_text: ''
 }
 
@@ -379,6 +380,37 @@ describe('FilterBar', () => {
         expect(latestPayload).toEqual({
             ...emptyFilters,
             search_text: 'n'
+        })
+    })
+
+    it('勾选仅看有 Note 应触发 has_note 更新', async () => {
+        const onChange = vi.fn()
+        const user = userEvent.setup()
+
+        render(
+            <FilterBar
+                options={options}
+                consulateGroups={groups}
+                filters={emptyFilters}
+                refreshFromMonth=""
+                refreshSources={['monthly_track']}
+                availableRefreshSources={options.fetch_sources}
+                defaultRefreshMonths={6}
+                showConsulateGroups={true}
+                isRefreshing={false}
+                refreshFeedback={null}
+                onRefreshFromMonthChange={vi.fn()}
+                onRefreshSourcesChange={vi.fn()}
+                onChange={onChange}
+                onReset={vi.fn()}
+                onRefresh={vi.fn()}
+            />
+        )
+
+        await user.click(screen.getByRole('checkbox', { name: '仅看有 Note 的案例' }))
+        expect(onChange).toHaveBeenCalledWith({
+            ...emptyFilters,
+            has_note: true
         })
     })
 })

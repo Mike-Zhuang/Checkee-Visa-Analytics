@@ -17,6 +17,7 @@ describe('api paramsFromFilters', () => {
             employers: ['Google'],
             detail_cities: ['Beijing'],
             detail_states: ['Beijing'],
+            has_note: true,
             search_text: 'stem case'
         }
 
@@ -28,6 +29,7 @@ describe('api paramsFromFilters', () => {
         expect(params.get('major_categories_l2')).toBe('Engineering')
         expect(params.get('majors')).toBe('CS')
         expect(params.get('employers')).toBe('Google')
+        expect(params.get('has_note')).toBe('true')
         expect(params.get('search_text')).toBe('stem case')
     })
 
@@ -44,6 +46,7 @@ describe('api paramsFromFilters', () => {
             employers: [],
             detail_cities: [],
             detail_states: [],
+            has_note: false,
             search_text: ''
         }
 

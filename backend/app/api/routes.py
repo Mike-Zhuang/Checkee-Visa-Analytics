@@ -69,6 +69,7 @@ def _filtered_rows(
     employers: str | None,
     detail_cities: str | None,
     detail_states: str | None,
+    has_note: bool | None,
     search_text: str | None,
 ):
     rows = service.get_cases()
@@ -87,6 +88,7 @@ def _filtered_rows(
         employers=_split_csv_values(employers),
         detail_cities=_split_csv_values(detail_cities),
         detail_states=_split_csv_values(detail_states),
+        has_note=has_note,
         search_text=(search_text or "").strip() or None,
     )
 
@@ -408,6 +410,7 @@ def cases(
     employers: str | None = Query(default=None),
     detail_cities: str | None = Query(default=None),
     detail_states: str | None = Query(default=None),
+    has_note: bool | None = Query(default=None),
     search_text: str | None = Query(default=None),
     limit: int = Query(default=API_DEFAULT_CASES_LIMIT, ge=1, le=API_MAX_CASES_LIMIT),
     offset: int = Query(default=0, ge=0),
@@ -424,6 +427,7 @@ def cases(
         employers,
         detail_cities,
         detail_states,
+        has_note,
         search_text,
     )
     total = len(filtered)
@@ -444,6 +448,7 @@ def overview(
     employers: str | None = None,
     detail_cities: str | None = None,
     detail_states: str | None = None,
+    has_note: bool | None = None,
     search_text: str | None = None,
 ):
     filtered = _filtered_rows(
@@ -458,6 +463,7 @@ def overview(
         employers,
         detail_cities,
         detail_states,
+        has_note,
         search_text,
     )
     return service.get_overview(filtered)
@@ -476,6 +482,7 @@ def monthly(
     employers: str | None = None,
     detail_cities: str | None = None,
     detail_states: str | None = None,
+    has_note: bool | None = None,
     search_text: str | None = None,
 ):
     filtered = _filtered_rows(
@@ -490,6 +497,7 @@ def monthly(
         employers,
         detail_cities,
         detail_states,
+        has_note,
         search_text,
     )
     return {"items": service.get_monthly(filtered)}
@@ -508,6 +516,7 @@ def sensitivity(
     employers: str | None = None,
     detail_cities: str | None = None,
     detail_states: str | None = None,
+    has_note: bool | None = None,
     search_text: str | None = None,
 ):
     filtered = _filtered_rows(
@@ -522,6 +531,7 @@ def sensitivity(
         employers,
         detail_cities,
         detail_states,
+        has_note,
         search_text,
     )
     return {"items": service.get_sensitivity(filtered)}
@@ -540,6 +550,7 @@ def cohorts(
     employers: str | None = None,
     detail_cities: str | None = None,
     detail_states: str | None = None,
+    has_note: bool | None = None,
     search_text: str | None = None,
 ):
     filtered = _filtered_rows(
@@ -554,6 +565,7 @@ def cohorts(
         employers,
         detail_cities,
         detail_states,
+        has_note,
         search_text,
     )
     items = [CohortStatsRow(**item).model_dump() for item in service.get_cohorts(filtered)]
@@ -573,6 +585,7 @@ def distribution(
     employers: str | None = None,
     detail_cities: str | None = None,
     detail_states: str | None = None,
+    has_note: bool | None = None,
     search_text: str | None = None,
 ):
     filtered = _filtered_rows(
@@ -587,6 +600,7 @@ def distribution(
         employers,
         detail_cities,
         detail_states,
+        has_note,
         search_text,
     )
     items = [DistributionRow(**item).model_dump() for item in service.get_distribution(filtered)]
@@ -606,6 +620,7 @@ def comparison(
     employers: str | None = None,
     detail_cities: str | None = None,
     detail_states: str | None = None,
+    has_note: bool | None = None,
     search_text: str | None = None,
 ) -> ComparisonResponse:
     filtered = _filtered_rows(
@@ -620,6 +635,7 @@ def comparison(
         employers,
         detail_cities,
         detail_states,
+        has_note,
         search_text,
     )
     return ComparisonResponse(**service.get_comparison(filtered))
@@ -638,6 +654,7 @@ def anomalies(
     employers: str | None = None,
     detail_cities: str | None = None,
     detail_states: str | None = None,
+    has_note: bool | None = None,
     search_text: str | None = None,
     threshold_days: int = Query(default=120, ge=1),
     limit: int = Query(default=50, ge=1, le=500),
@@ -654,6 +671,7 @@ def anomalies(
         employers,
         detail_cities,
         detail_states,
+        has_note,
         search_text,
     )
     items = [
@@ -676,6 +694,7 @@ def export_report(
     employers: str | None = None,
     detail_cities: str | None = None,
     detail_states: str | None = None,
+    has_note: bool | None = None,
     search_text: str | None = None,
 ):
     filtered = _filtered_rows(
@@ -690,6 +709,7 @@ def export_report(
         employers,
         detail_cities,
         detail_states,
+        has_note,
         search_text,
     )
     return service.get_report(filtered)
@@ -708,6 +728,7 @@ def export_cases_csv(
     employers: str | None = None,
     detail_cities: str | None = None,
     detail_states: str | None = None,
+    has_note: bool | None = None,
     search_text: str | None = None,
 ):
     rows = _filtered_rows(
@@ -722,6 +743,7 @@ def export_cases_csv(
         employers,
         detail_cities,
         detail_states,
+        has_note,
         search_text,
     )
     if not rows:

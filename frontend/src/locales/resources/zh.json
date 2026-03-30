@@ -75,6 +75,8 @@
         "searchText": "文本搜索（备注 + 雇主）",
         "searchTextPlaceholder": "例如：amazon cleared",
         "searchTextHint": "输入关键词后会同时匹配详情备注与雇主字段。",
+        "hasNoteOnly": "仅看有 Note 的案例",
+        "hasNoteOnlyHint": "勾选后只保留详情备注非空的案例。",
         "consulates": "领馆",
         "consulatesHint": "按领馆筛选，便于比较不同地区。",
         "groupedConsulates": "领馆（按国家/地区分组）",
@@ -105,6 +107,7 @@
         "chipEmployer": "雇主:{{value}}",
         "chipDetailCity": "城市:{{value}}",
         "chipDetailState": "州省:{{value}}",
+        "chipHasNote": "仅有Note",
         "chipSearch": "搜索:{{value}}",
         "emptyOptions": "暂无可选项"
     },

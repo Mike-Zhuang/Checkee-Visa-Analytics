@@ -529,6 +529,7 @@ class DataService:
         employers: set[str] | None,
         detail_cities: set[str] | None,
         detail_states: set[str] | None,
+        has_note: bool | None,
         search_text: str | None,
     ) -> list[dict[str, str]]:
         return analytics.filter_rows(
@@ -544,6 +545,7 @@ class DataService:
             employers=employers,
             detail_cities=detail_cities,
             detail_states=detail_states,
+            has_note=has_note,
             search_text=search_text,
         )
 

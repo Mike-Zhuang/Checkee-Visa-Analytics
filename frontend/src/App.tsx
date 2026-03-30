@@ -54,6 +54,7 @@ const EMPTY_FILTERS: Filters = {
     employers: [],
     detail_cities: [],
     detail_states: [],
+    has_note: false,
     search_text: ''
 }
 

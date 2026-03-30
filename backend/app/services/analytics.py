@@ -110,6 +110,7 @@ def filter_rows(
     employers: set[str] | None = None,
     detail_cities: set[str] | None = None,
     detail_states: set[str] | None = None,
+    has_note: bool | None = None,
     search_text: str | None = None,
 ) -> list[dict[str, str]]:
     compact_search = re.sub(r"\s+", " ", search_text or "").strip().lower()
@@ -139,6 +140,8 @@ def filter_rows(
         if detail_cities and (r.get("detail_city") or "") not in detail_cities:
             continue
         if detail_states and (r.get("detail_state") or "") not in detail_states:
+            continue
+        if has_note is True and not str(r.get("detail_note") or "").strip():
             continue
         if search_terms:
             searchable = " ".join(

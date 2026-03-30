@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.services import storage
+
 
 def test_cases_pagination(client, seed_cases) -> None:
     response = client.get("/api/v1/cases", params={"limit": 2, "offset": 1})
@@ -54,6 +56,18 @@ def test_cases_major_category_filters_engineering_abbreviation(client, seed_case
     payload = response.json()
     assert payload["total"] == 1
     assert payload["items"][0]["case_number"] == "A003"
+
+
+def test_cases_has_note_filter(client, seed_cases) -> None:
+    rows = storage.load_cases()
+    rows[0]["detail_note"] = ""
+    storage.save_cases(rows)
+
+    response = client.get("/api/v1/cases", params={"has_note": "true"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 3
+    assert all(str(item.get("detail_note") or "").strip() for item in payload["items"])
 
 
 def test_overview_stats(client, seed_cases) -> None:
