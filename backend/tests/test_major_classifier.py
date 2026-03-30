@@ -77,3 +77,45 @@ def test_not_applicable_items_exposed_as_read_only_group() -> None:
     assert na_item["source"] == major_classifier.MAJOR_SOURCE_NOT_APPLICABLE
     assert na_item["has_manual_override"] is False
     assert na_item["effective_category_l2"] == major_classifier.MAJOR_NOT_APPLICABLE_L2
+
+
+def test_single_level_major_maps_to_unspecified_l2() -> None:
+    rows = [{"major": "STEM"}]
+
+    major_classifier.apply_major_classification(
+        rows,
+        overrides={},
+        rules=major_classifier.DEFAULT_MAJOR_TAXONOMY_RULES,
+    )
+
+    row = rows[0]
+    assert row["major_category_l1"] == "STEM"
+    assert row["major_category_l2"] == major_classifier.MAJOR_UNSPECIFIED_L2
+    assert row["major_classification_source"] == major_classifier.MAJOR_SOURCE_AUTO
+
+
+def test_common_disciplines_have_auto_classification() -> None:
+    rows = [
+        {"major": "Architecture"},
+        {"major": "Biotech"},
+        {"major": "Biochem"},
+        {"major": "Astronomy"},
+    ]
+
+    major_classifier.apply_major_classification(
+        rows,
+        overrides={},
+        rules=major_classifier.DEFAULT_MAJOR_TAXONOMY_RULES,
+    )
+
+    expected = {
+        "Architecture": ("Arts&Humanities", "Arts & Design"),
+        "Biotech": ("STEM", "Natural Science"),
+        "Biochem": ("STEM", "Natural Science"),
+        "Astronomy": ("STEM", "Natural Science"),
+    }
+    for row in rows:
+        major = row["major"]
+        assert row["major_category_l1"] == expected[major][0]
+        assert row["major_category_l2"] == expected[major][1]
+        assert row["major_classification_source"] == major_classifier.MAJOR_SOURCE_AUTO

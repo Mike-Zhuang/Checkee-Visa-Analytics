@@ -243,6 +243,9 @@
         "logStatusError": "Error",
         "logOccurredAt": "Time: {{value}}",
         "logTriggeredBy": "Trigger: {{value}}",
+        "logTriggeredByManual": "Manual",
+        "logTriggeredByScheduled": "Scheduled",
+        "logTriggeredByAutoFallback": "Auto fallback",
         "logRetryAfter": "Retry after: {{seconds}}s",
         "logTotalCases": "Cases after refresh: {{count}}"
     },
@@ -326,6 +329,7 @@
         "completeDate": "Complete Date",
         "calcDays": "Calc Days",
         "note": "Note",
+        "noteTimeline": "Timeline",
         "first": "First",
         "prev": "Previous",
         "next": "Next",

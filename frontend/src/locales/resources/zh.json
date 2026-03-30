@@ -243,6 +243,9 @@
         "logStatusError": "错误",
         "logOccurredAt": "时间：{{value}}",
         "logTriggeredBy": "触发方式：{{value}}",
+        "logTriggeredByManual": "手动",
+        "logTriggeredByScheduled": "定时",
+        "logTriggeredByAutoFallback": "自动兜底",
         "logRetryAfter": "建议重试：{{seconds}} 秒后",
         "logTotalCases": "刷新后案例数：{{count}}"
     },
@@ -326,6 +329,7 @@
         "completeDate": "Complete Date",
         "calcDays": "Calc Days",
         "note": "备注",
+        "noteTimeline": "时间线",
         "first": "首页",
         "prev": "上一页",
         "next": "下一页",

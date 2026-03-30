@@ -6,6 +6,7 @@ import pytest
 from app.services.scraper import (
     CaseRow,
     FetchResult,
+    _extract_detail_fields,
     _extract_entry_points,
     _normalize_sources,
     list_supported_sources,
@@ -51,6 +52,31 @@ def test_normalize_sources_accepts_alias_and_dedupes() -> None:
 def test_normalize_sources_rejects_unsupported() -> None:
     with pytest.raises(ValueError):
         _normalize_sources(["legacy_table"])
+
+
+def test_extract_detail_fields_supports_inline_note_cells() -> None:
+    html = """
+    <html>
+      <body>
+        <table border="1">
+          <tr><td>Employer: N/A</td><td>Status: Clear</td></tr>
+          <tr>
+            <td colspan="2">
+              Note:<br>
+              interview 2.5 <br><br>
+              Submit documents via email 2.6 <br><br>
+              issued 3.18
+            </td>
+          </tr>
+        </table>
+      </body>
+    </html>
+    """
+
+    fields = _extract_detail_fields(html)
+    assert fields["detail_employer"] == ""
+    assert "interview 2.5" in fields["detail_note"]
+    assert "issued 3.18" in fields["detail_note"]
 
 
 def test_refresh_writes_source_and_quality_meta(monkeypatch) -> None:

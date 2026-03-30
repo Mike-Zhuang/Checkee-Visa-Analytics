@@ -128,6 +128,13 @@ export default function AdminPage() {
         return status
     }
 
+    const triggerLabel = (triggeredBy: string): string => {
+        if (triggeredBy === 'manual') return t('admin.logTriggeredByManual')
+        if (triggeredBy === 'scheduled') return t('admin.logTriggeredByScheduled')
+        if (triggeredBy === 'auto_fallback') return t('admin.logTriggeredByAutoFallback')
+        return triggeredBy
+    }
+
     const historyDetail = (item: RefreshHistoryItem): string | null => {
         const details = item.details
         if (!details) {
@@ -784,7 +791,7 @@ export default function AdminPage() {
                                     </div>
                                     <div className="admin-history-meta">
                                         <span>{t('admin.logOccurredAt', { value: item.occurred_at })}</span>
-                                        <span>{t('admin.logTriggeredBy', { value: item.triggered_by })}</span>
+                                        <span>{t('admin.logTriggeredBy', { value: triggerLabel(item.triggered_by) })}</span>
                                         {historyDetail(item) ? <span>{historyDetail(item)}</span> : null}
                                     </div>
                                 </li>

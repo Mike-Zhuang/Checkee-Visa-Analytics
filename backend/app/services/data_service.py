@@ -152,6 +152,7 @@ class DataService:
         months: int = 6,
         from_month: str | None = None,
         sources: list[str] | None = None,
+        triggered_by: str = "manual",
     ) -> dict[str, Any]:
         with self._lock:
             self._enforce_refresh_interval()
@@ -185,7 +186,7 @@ class DataService:
                 "occurred_at": datetime.now().isoformat(timespec="seconds"),
                 "status": "success",
                 "message": "refresh completed",
-                "triggered_by": "manual",
+                "triggered_by": triggered_by,
                 "details": {
                     "total_cases": len(payload),
                     "fetched_month_count": len(fetch_result.fetched_months),

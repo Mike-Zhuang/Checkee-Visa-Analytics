@@ -41,6 +41,9 @@ from app.services.admin_auth import create_admin_session, get_session_expiry, re
 
 router = APIRouter(prefix="/api/v1", tags=["checkee"])
 ADMIN_STALE_REFRESH_THRESHOLD_SECONDS = 6 * 60 * 60
+REFRESH_TRIGGERED_BY_MANUAL = "manual"
+REFRESH_TRIGGERED_BY_SCHEDULED = "scheduled"
+REFRESH_TRIGGERED_BY_AUTO_FALLBACK = "auto_fallback"
 
 
 def _split_csv_values(raw: str | None, upper: bool = False) -> set[str] | None:
@@ -88,21 +91,34 @@ def _filtered_rows(
     )
 
 
-def _require_admin_refresh_key(request: Request) -> None:
+def _resolve_refresh_triggered_by(request: Request) -> str:
+    token = _extract_bearer_token(request.headers.get("Authorization"))
+    if token and get_session_expiry(token) is not None:
+        return REFRESH_TRIGGERED_BY_MANUAL
+
+    provided_key = request.headers.get("X-Admin-Key", "").strip()
+    if provided_key:
+        return REFRESH_TRIGGERED_BY_SCHEDULED
+
+    return REFRESH_TRIGGERED_BY_MANUAL
+
+
+def _require_admin_refresh_key(request: Request) -> str:
+    triggered_by = _resolve_refresh_triggered_by(request)
     if not REFRESH_REQUIRE_ADMIN_KEY:
-        return
+        return triggered_by
 
     bearer_token = _extract_bearer_token(request.headers.get("Authorization"))
     if bearer_token:
         if get_session_expiry(bearer_token) is not None:
-            return
+            return REFRESH_TRIGGERED_BY_MANUAL
 
     key = ADMIN_REFRESH_KEY.strip()
     if not key:
         service.record_refresh_event(
             status="error",
             message="admin refresh key is not configured",
-            triggered_by="manual",
+            triggered_by=triggered_by,
         )
         raise HTTPException(status_code=503, detail="admin refresh key is not configured")
 
@@ -112,10 +128,11 @@ def _require_admin_refresh_key(request: Request) -> None:
         service.record_refresh_event(
             status="denied",
             message="admin auth invalid",
-            triggered_by="manual",
+            triggered_by=triggered_by,
             details={"remote_addr": remote_addr, "has_bearer": bool(bearer_token)},
         )
         raise HTTPException(status_code=403, detail="admin auth invalid")
+    return REFRESH_TRIGGERED_BY_SCHEDULED
 
 
 def _extract_bearer_token(authorization: str | None) -> str:
@@ -147,7 +164,7 @@ def admin_login(req: AdminLoginRequest, request: Request) -> AdminSessionRespons
         service.record_refresh_event(
             status="denied",
             message="admin login failed",
-            triggered_by="manual",
+            triggered_by=REFRESH_TRIGGERED_BY_MANUAL,
             details={"remote_addr": remote_addr},
         )
         raise HTTPException(status_code=401, detail="admin password invalid")
@@ -223,6 +240,7 @@ def admin_refresh_stale_trigger(request: Request) -> AdminStaleRefreshResponse:
             months=months,
             from_month=from_month,
             sources=sources,
+            triggered_by=REFRESH_TRIGGERED_BY_AUTO_FALLBACK,
         )
         refreshed_meta = service.get_meta()
         refreshed_updated_at = str(refreshed_meta.get("updated_at") or "") or None
@@ -245,7 +263,7 @@ def admin_refresh_stale_trigger(request: Request) -> AdminStaleRefreshResponse:
         service.record_refresh_event(
             status="error",
             message=f"admin stale refresh failed: {exc}",
-            triggered_by="manual",
+            triggered_by=REFRESH_TRIGGERED_BY_AUTO_FALLBACK,
         )
         current_meta = service.get_meta()
         current_updated_at = str(current_meta.get("updated_at") or "") or None
@@ -302,7 +320,7 @@ def health() -> HealthResponse:
 
 @router.post("/tasks/refresh", response_model=RefreshResponse)
 def refresh(req: RefreshRequest, request: Request) -> RefreshResponse:
-    _require_admin_refresh_key(request)
+    triggered_by = _require_admin_refresh_key(request)
 
     try:
         result = service.refresh(
@@ -310,13 +328,14 @@ def refresh(req: RefreshRequest, request: Request) -> RefreshResponse:
             months=req.months,
             from_month=req.from_month,
             sources=req.sources,
+            triggered_by=triggered_by,
         )
         return RefreshResponse(**result)
     except RefreshRateLimitError as exc:
         service.record_refresh_event(
             status="blocked",
             message=f"refresh cooldown in effect, retry in {exc.retry_after_seconds}s",
-            triggered_by="manual",
+            triggered_by=triggered_by,
             details={"retry_after_seconds": exc.retry_after_seconds},
         )
         raise HTTPException(
@@ -328,14 +347,14 @@ def refresh(req: RefreshRequest, request: Request) -> RefreshResponse:
         service.record_refresh_event(
             status="error",
             message=str(exc),
-            triggered_by="manual",
+            triggered_by=triggered_by,
         )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         service.record_refresh_event(
             status="error",
             message=str(exc),
-            triggered_by="manual",
+            triggered_by=triggered_by,
         )
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

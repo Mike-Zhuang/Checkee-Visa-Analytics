@@ -13,7 +13,14 @@ def test_refresh_invalid_from_month_returns_400(client, monkeypatch) -> None:
 
     monkeypatch.setattr(routes, "REFRESH_REQUIRE_ADMIN_KEY", False)
 
-    def fake_refresh(*, all_months: bool, months: int, from_month: str | None, sources: list[str] | None):
+    def fake_refresh(
+        *,
+        all_months: bool,
+        months: int,
+        from_month: str | None,
+        sources: list[str] | None,
+        triggered_by: str,
+    ):
         raise ValueError("from_month must be in YYYY-MM format")
 
     monkeypatch.setattr(routes.service, "refresh", fake_refresh)
@@ -30,7 +37,17 @@ def test_refresh_success_payload(client, monkeypatch) -> None:
 
     monkeypatch.setattr(routes, "REFRESH_REQUIRE_ADMIN_KEY", False)
 
-    def fake_refresh(*, all_months: bool, months: int, from_month: str | None, sources: list[str] | None):
+    captured: dict[str, str] = {}
+
+    def fake_refresh(
+        *,
+        all_months: bool,
+        months: int,
+        from_month: str | None,
+        sources: list[str] | None,
+        triggered_by: str,
+    ):
+        captured["triggered_by"] = triggered_by
         return {
             "success": True,
             "message": "refresh completed",
@@ -50,6 +67,7 @@ def test_refresh_success_payload(client, monkeypatch) -> None:
     assert payload["total_cases"] == 123
     assert payload["fetched_months"] == ["2026-03", "2026-02"]
     assert payload["selected_sources"] == ["monthly_track"]
+    assert captured["triggered_by"] == "manual"
 
 
 def test_refresh_unsupported_sources_returns_400(client, monkeypatch) -> None:
@@ -57,7 +75,14 @@ def test_refresh_unsupported_sources_returns_400(client, monkeypatch) -> None:
 
     monkeypatch.setattr(routes, "REFRESH_REQUIRE_ADMIN_KEY", False)
 
-    def fake_refresh(*, all_months: bool, months: int, from_month: str | None, sources: list[str] | None):
+    def fake_refresh(
+        *,
+        all_months: bool,
+        months: int,
+        from_month: str | None,
+        sources: list[str] | None,
+        triggered_by: str,
+    ):
         raise ValueError("unsupported sources: legacy_table; supported sources: monthly_track")
 
     monkeypatch.setattr(routes.service, "refresh", fake_refresh)
@@ -75,7 +100,17 @@ def test_refresh_requires_admin_key_when_enabled(client, monkeypatch) -> None:
     monkeypatch.setattr(routes, "REFRESH_REQUIRE_ADMIN_KEY", True)
     monkeypatch.setattr(routes, "ADMIN_REFRESH_KEY", "test-admin-key")
 
-    def fake_refresh(*, all_months: bool, months: int, from_month: str | None, sources: list[str] | None):
+    captured: dict[str, str] = {}
+
+    def fake_refresh(
+        *,
+        all_months: bool,
+        months: int,
+        from_month: str | None,
+        sources: list[str] | None,
+        triggered_by: str,
+    ):
+        captured["triggered_by"] = triggered_by
         return {
             "success": True,
             "message": "refresh completed",
@@ -100,6 +135,8 @@ def test_refresh_requires_admin_key_when_enabled(client, monkeypatch) -> None:
         headers={"X-Admin-Key": "wrong-key"},
     )
     assert response.status_code == 403
+    denied_with_key = client.get("/api/v1/meta/state").json()["refresh_history"][0]
+    assert denied_with_key["triggered_by"] == "scheduled"
 
     response = client.post(
         "/api/v1/tasks/refresh",
@@ -107,6 +144,7 @@ def test_refresh_requires_admin_key_when_enabled(client, monkeypatch) -> None:
         headers={"X-Admin-Key": "test-admin-key"},
     )
     assert response.status_code == 200
+    assert captured["triggered_by"] == "scheduled"
 
 
 def test_refresh_cooldown_returns_429(client, monkeypatch) -> None:
@@ -115,7 +153,14 @@ def test_refresh_cooldown_returns_429(client, monkeypatch) -> None:
 
     monkeypatch.setattr(routes, "REFRESH_REQUIRE_ADMIN_KEY", False)
 
-    def fake_refresh(*, all_months: bool, months: int, from_month: str | None, sources: list[str] | None):
+    def fake_refresh(
+        *,
+        all_months: bool,
+        months: int,
+        from_month: str | None,
+        sources: list[str] | None,
+        triggered_by: str,
+    ):
         raise RefreshRateLimitError(119)
 
     monkeypatch.setattr(routes.service, "refresh", fake_refresh)
@@ -172,10 +217,9 @@ def test_admin_stale_refresh_triggered(client, monkeypatch) -> None:
     ]
 
     monkeypatch.setattr(routes.service, "get_meta", lambda: meta_calls.pop(0))
-    monkeypatch.setattr(
-        routes.service,
-        "refresh",
-        lambda *, all_months, months, from_month, sources: {
+    def fake_refresh(*, all_months: bool, months: int, from_month: str | None, sources: list[str] | None, triggered_by: str):
+        assert triggered_by == "auto_fallback"
+        return {
             "success": True,
             "message": "refresh completed",
             "fetched_months": ["2026-03"],
@@ -184,8 +228,9 @@ def test_admin_stale_refresh_triggered(client, monkeypatch) -> None:
             "truncated_by_limit": False,
             "month_limit": 120,
             "generated_at": datetime.now(),
-        },
-    )
+        }
+
+    monkeypatch.setattr(routes.service, "refresh", fake_refresh)
 
     response = client.post("/api/v1/admin/refresh/stale-trigger")
     assert response.status_code == 200
@@ -212,7 +257,15 @@ def test_admin_stale_refresh_cooldown(client, monkeypatch) -> None:
         },
     )
 
-    def fake_refresh(*, all_months: bool, months: int, from_month: str | None, sources: list[str] | None):
+    def fake_refresh(
+        *,
+        all_months: bool,
+        months: int,
+        from_month: str | None,
+        sources: list[str] | None,
+        triggered_by: str,
+    ):
+        assert triggered_by == "auto_fallback"
         raise RefreshRateLimitError(123)
 
     monkeypatch.setattr(routes.service, "refresh", fake_refresh)
@@ -241,7 +294,15 @@ def test_admin_stale_refresh_error(client, monkeypatch) -> None:
         },
     )
 
-    def fake_refresh(*, all_months: bool, months: int, from_month: str | None, sources: list[str] | None):
+    def fake_refresh(
+        *,
+        all_months: bool,
+        months: int,
+        from_month: str | None,
+        sources: list[str] | None,
+        triggered_by: str,
+    ):
+        assert triggered_by == "auto_fallback"
         raise RuntimeError("boom")
 
     monkeypatch.setattr(routes.service, "refresh", fake_refresh)

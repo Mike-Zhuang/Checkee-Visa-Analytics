@@ -85,4 +85,30 @@ describe('CaseTable', () => {
         expect(screen.getByText('Google').closest('td')).toHaveClass('case-col-optional')
         expect(screen.getByText('I20').closest('td')).toHaveClass('case-col-tertiary')
     })
+
+    it('备注应同时展示原文与时间线', () => {
+        const timelineRows: CaseItem[] = [
+            {
+                ...rows[0],
+                case_number: 'A002',
+                detail_note: 'interview 2.5 Submit documents via email 2.6 issued 3.18'
+            }
+        ]
+
+        render(
+            <CaseTable
+                rows={timelineRows}
+                total={1}
+                page={1}
+                pageSize={50}
+                onPageChange={vi.fn()}
+                onPageSizeChange={vi.fn()}
+            />
+        )
+
+        expect(screen.getByText(/interview 2.5 Submit documents via email/i)).toBeInTheDocument()
+        expect(screen.getByLabelText('时间线')).toBeInTheDocument()
+        expect(screen.getByText('2.5')).toBeInTheDocument()
+        expect(screen.getByText('3.18')).toBeInTheDocument()
+    })
 })

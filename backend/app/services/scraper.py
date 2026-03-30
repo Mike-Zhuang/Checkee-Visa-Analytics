@@ -310,6 +310,26 @@ def _normalize_detail_label(label: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", label.lower()).strip()
 
 
+def _extract_inline_label_value(text: str) -> tuple[str, str] | None:
+    compact = _compact_text(text, limit=1200)
+    if not compact:
+        return None
+    if ":" not in compact and "：" not in compact:
+        return None
+
+    parts = re.split(r"\s*[：:]\s*", compact, maxsplit=1)
+    if len(parts) != 2:
+        return None
+
+    label = parts[0].strip()
+    value = _compact_text(parts[1], limit=1200)
+    if not label or not value:
+        return None
+    if len(label) > 80:
+        return None
+    return label, value
+
+
 def _extract_detail_pairs(soup: BeautifulSoup) -> dict[str, str]:
     pairs: dict[str, str] = {}
 
@@ -325,7 +345,14 @@ def _extract_detail_pairs(soup: BeautifulSoup) -> dict[str, str]:
 
     for tr in soup.find_all("tr"):
         cells = tr.find_all(["th", "td"])
+        for cell in cells:
+            inline = _extract_inline_label_value(cell.get_text(" ", strip=True))
+            if inline is not None:
+                put(inline[0], inline[1])
+
         if len(cells) < 2:
+            continue
+        if _extract_inline_label_value(cells[0].get_text(" ", strip=True)) is not None:
             continue
         label = cells[0].get_text(" ", strip=True)
         value = cells[1].get_text(" ", strip=True)
@@ -348,9 +375,20 @@ def _extract_detail_pairs(soup: BeautifulSoup) -> dict[str, str]:
 
 
 def _pick_detail_value(pairs: dict[str, str], aliases: tuple[str, ...]) -> str:
+    placeholder_values = {
+        "n a",
+        "na",
+        "none",
+        "null",
+        "nil",
+        "not applicable",
+        "not available",
+    }
+
     for alias in aliases:
         for key, value in pairs.items():
-            if alias in key and value:
+            normalized_value = _normalize_detail_label(value)
+            if alias in key and value and normalized_value not in placeholder_values:
                 return value
     return ""
 

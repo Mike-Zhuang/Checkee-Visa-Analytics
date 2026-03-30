@@ -17,11 +17,60 @@ MAJOR_CATEGORY_L1_OPTIONS = [
 
 MAJOR_NOT_APPLICABLE_L1 = "Other"
 MAJOR_NOT_APPLICABLE_L2 = "Not Applicable"
+MAJOR_UNSPECIFIED_L2 = "Unspecified"
 
 MAJOR_SOURCE_MANUAL = "manual"
 MAJOR_SOURCE_AUTO = "auto"
 MAJOR_SOURCE_UNKNOWN = "unknown"
 MAJOR_SOURCE_NOT_APPLICABLE = "not_applicable"
+
+MAJOR_EXACT_AUTO_CLASSIFICATION: dict[str, tuple[str, str]] = {
+    "architecture": ("Arts&Humanities", "Arts & Design"),
+    "architectural computation": ("Arts&Humanities", "Arts & Design"),
+    "astronomy": ("STEM", "Natural Science"),
+    "astrophysics": ("STEM", "Natural Science"),
+    "automation": ("STEM", "Engineering"),
+    "be": ("STEM", "Engineering"),
+    "bme": ("STEM", "Engineering"),
+    "bio": ("STEM", "Natural Science"),
+    "biochem": ("STEM", "Natural Science"),
+    "biochemistry": ("STEM", "Natural Science"),
+    "biomed": ("STEM", "Engineering"),
+    "biotech": ("STEM", "Natural Science"),
+    "biotechnology": ("STEM", "Natural Science"),
+    "ce": ("STEM", "Engineering"),
+    "cheme": ("STEM", "Engineering"),
+    "cis": ("STEM", "Software & Systems"),
+    "electronic information": ("STEM", "Engineering"),
+    "immunology": ("STEM", "Natural Science"),
+    "information science": ("STEM", "Software & Systems"),
+    "information system": ("STEM", "Software & Systems"),
+    "it": ("STEM", "Software & Systems"),
+    "mae": ("STEM", "Engineering"),
+    "material science": ("STEM", "Engineering"),
+    "me": ("STEM", "Engineering"),
+    "mecheng": ("STEM", "Engineering"),
+    "mse": ("STEM", "Engineering"),
+    "neuroscience": ("STEM", "Natural Science"),
+    "pharmacology": ("STEM", "Natural Science"),
+    "semiconductor": ("STEM", "Engineering"),
+    "stem": ("STEM", MAJOR_UNSPECIFIED_L2),
+    "stem phd": ("STEM", MAJOR_UNSPECIFIED_L2),
+    "swe": ("STEM", "Software & Systems"),
+}
+
+MAJOR_L1_TO_UNSPECIFIED: dict[str, str] = {
+    "stem": "STEM",
+    "business": "Business",
+    "health": "Health",
+    "arts humanities": "Arts&Humanities",
+    "arts and humanities": "Arts&Humanities",
+    "law policy": "Law&Policy",
+    "law and policy": "Law&Policy",
+    "social science": "Social Science",
+    "education": "Education",
+    "other": "Other",
+}
 
 NOT_APPLICABLE_MAJOR_TOKENS = {
     "n a",
@@ -37,7 +86,7 @@ DEFAULT_MAJOR_TAXONOMY_RULES: list[dict[str, Any]] = [
     {"l1": "STEM", "l2": "AI & Data", "keywords": ["artificial intelligence", "machine learning", "deep learning", "data science", "data analytics", "computer science", "ai", "ml", "ds", "nlp", "algorithm", "statistics", "statistical", "stats"]},
     {"l1": "STEM", "l2": "Software & Systems", "keywords": ["software", "computer engineering", "information technology", "information systems", "cyber", "network", "cloud", "cse", "cs"]},
     {"l1": "STEM", "l2": "Engineering", "keywords": ["engineering", "electrical", "electronics", "electrical engineering", "electronics engineering", "mechanical", "civil", "industrial", "materials", "robotics", "aerospace", "biomedical engineering", "ece", "ee"]},
-    {"l1": "STEM", "l2": "Natural Science", "keywords": ["physics", "chemistry", "biology", "biotechnology", "mathematics", "math", "applied math", "geology", "environmental science"]},
+    {"l1": "STEM", "l2": "Natural Science", "keywords": ["physics", "chemistry", "biology", "biotechnology", "biotech", "biochemistry", "biochem", "microbiology", "molecular biology", "immunology", "neuroscience", "pharmacology", "astronomy", "astrophysics", "bioinformatics", "bioinfo", "mathematics", "math", "applied math", "geology", "environmental science"]},
     {"l1": "Business", "l2": "Management & Operations", "keywords": ["business", "management", "mba", "operations", "supply chain", "entrepreneurship", "project management"]},
     {"l1": "Business", "l2": "Finance & Accounting", "keywords": ["finance", "financial", "accounting", "tax", "audit", "banking", "investment", "econometrics"]},
     {"l1": "Business", "l2": "Marketing & Commerce", "keywords": ["marketing", "market", "commerce", "e-commerce", "advertising", "brand", "retail"]},
@@ -74,8 +123,8 @@ def is_not_applicable_major(major_norm: str) -> bool:
 
 def taxonomy_l2_options(rules: list[dict[str, Any]]) -> list[str]:
     values = sorted({str(rule.get("l2") or "").strip() for rule in rules if str(rule.get("l2") or "").strip()})
-    if "Unspecified" not in values:
-        values.append("Unspecified")
+    if MAJOR_UNSPECIFIED_L2 not in values:
+        values.append(MAJOR_UNSPECIFIED_L2)
     if MAJOR_NOT_APPLICABLE_L2 not in values:
         values.append(MAJOR_NOT_APPLICABLE_L2)
     return values
@@ -87,12 +136,31 @@ def taxonomy_l1_options(rules: list[dict[str, Any]]) -> list[str]:
     return merged
 
 
+def _auto_classify_exact_major(major_norm: str) -> tuple[str, str] | None:
+    return MAJOR_EXACT_AUTO_CLASSIFICATION.get(major_norm)
+
+
+def _auto_classify_single_level_major(major_norm: str) -> tuple[str, str] | None:
+    major_l1 = MAJOR_L1_TO_UNSPECIFIED.get(major_norm)
+    if not major_l1:
+        return None
+    return major_l1, MAJOR_UNSPECIFIED_L2
+
+
 def _auto_classify_major(major_norm: str, rules: list[dict[str, Any]]) -> tuple[str, str, str]:
     if not major_norm:
-        return "Other", "Unspecified", MAJOR_SOURCE_UNKNOWN
+        return "Other", MAJOR_UNSPECIFIED_L2, MAJOR_SOURCE_UNKNOWN
 
     if is_not_applicable_major(major_norm):
         return MAJOR_NOT_APPLICABLE_L1, MAJOR_NOT_APPLICABLE_L2, MAJOR_SOURCE_NOT_APPLICABLE
+
+    exact_match = _auto_classify_exact_major(major_norm)
+    if exact_match is not None:
+        return exact_match[0], exact_match[1], MAJOR_SOURCE_AUTO
+
+    single_level_match = _auto_classify_single_level_major(major_norm)
+    if single_level_match is not None:
+        return single_level_match[0], single_level_match[1], MAJOR_SOURCE_AUTO
 
     best_rule: dict[str, Any] | None = None
     best_score = -1
@@ -112,10 +180,10 @@ def _auto_classify_major(major_norm: str, rules: list[dict[str, Any]]) -> tuple[
             best_rule = rule
 
     if best_rule is None or best_score <= 0:
-        return "Other", "Unspecified", MAJOR_SOURCE_UNKNOWN
+        return "Other", MAJOR_UNSPECIFIED_L2, MAJOR_SOURCE_UNKNOWN
 
     l1 = str(best_rule.get("l1") or "Other").strip() or "Other"
-    l2 = str(best_rule.get("l2") or "Unspecified").strip() or "Unspecified"
+    l2 = str(best_rule.get("l2") or MAJOR_UNSPECIFIED_L2).strip() or MAJOR_UNSPECIFIED_L2
     return l1, l2, MAJOR_SOURCE_AUTO
 
 
@@ -145,7 +213,7 @@ def apply_major_classification(
         if major_norm and major_norm in overrides:
             override = overrides[major_norm]
             row["major_category_l1"] = str(override.get("category_l1") or "Other")
-            row["major_category_l2"] = str(override.get("category_l2") or "Unspecified")
+            row["major_category_l2"] = str(override.get("category_l2") or MAJOR_UNSPECIFIED_L2)
             row["major_classification_source"] = MAJOR_SOURCE_MANUAL
             manual_count += 1
             continue

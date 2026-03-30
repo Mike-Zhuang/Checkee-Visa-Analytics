@@ -301,4 +301,49 @@ describe('AdminPage', () => {
             expect(screen.getByText(/检测到数据过旧，已触发兜底刷新/)).toBeInTheDocument()
         })
     })
+
+    it('刷新记录应显示触发方式中文映射', async () => {
+        apiMock.getMetaState.mockResolvedValue({
+            fetched_months: ['2026-03'],
+            fetched_month_count: 1,
+            total_cases: 100,
+            all_months: false,
+            months_arg: 6,
+            from_month: null,
+            truncated_by_limit: false,
+            month_limit: 120,
+            updated_at: '2026-03-28T15:20:00Z',
+            has_data: true,
+            current_case_count: 100,
+            data_freshness_seconds: 120,
+            refresh_min_interval_seconds: 300,
+            refresh_available_in_seconds: 0,
+            refresh_history: [
+                {
+                    occurred_at: '2026-03-30T16:10:28',
+                    status: 'success',
+                    message: 'refresh completed',
+                    triggered_by: 'scheduled',
+                    details: {
+                        total_cases: 1364
+                    }
+                }
+            ],
+            fetched_month_range: {
+                latest: '2026-03',
+                earliest: '2026-03'
+            },
+            selected_sources: ['monthly_track'],
+            supported_sources: ['monthly_track']
+        })
+
+        render(<AdminPage />)
+
+        await waitFor(() => {
+            expect(apiMock.getOptions).toHaveBeenCalledTimes(1)
+            expect(apiMock.getMetaState).toHaveBeenCalledTimes(1)
+        })
+
+        expect(screen.getByText('触发方式：定时')).toBeInTheDocument()
+    })
 })

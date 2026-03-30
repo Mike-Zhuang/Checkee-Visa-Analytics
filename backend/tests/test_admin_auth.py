@@ -80,7 +80,17 @@ def test_refresh_allows_bearer_session_when_admin_key_required(client, monkeypat
     monkeypatch.setattr(routes, "ADMIN_REFRESH_KEY", "super-secret")
     monkeypatch.setattr(routes, "ADMIN_SESSION_TTL_SECONDS", 3600)
 
-    def fake_refresh(*, all_months: bool, months: int, from_month: str | None, sources: list[str] | None):
+    captured: dict[str, str] = {}
+
+    def fake_refresh(
+        *,
+        all_months: bool,
+        months: int,
+        from_month: str | None,
+        sources: list[str] | None,
+        triggered_by: str,
+    ):
+        captured["triggered_by"] = triggered_by
         return {
             "success": True,
             "message": "refresh completed",
@@ -104,6 +114,7 @@ def test_refresh_allows_bearer_session_when_admin_key_required(client, monkeypat
     )
     assert refresh_response.status_code == 200
     assert refresh_response.json()["success"] is True
+    assert captured["triggered_by"] == "manual"
 
 
 def test_admin_major_classifications_requires_session(client) -> None:

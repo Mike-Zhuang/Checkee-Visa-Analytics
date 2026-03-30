@@ -1468,6 +1468,44 @@ button.mini {
     border-color: #d4dde7;
 }
 
+.note-cell {
+    display: grid;
+    gap: 6px;
+}
+
+.note-raw {
+    color: #2b3f55;
+    line-height: 1.35;
+}
+
+.note-timeline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.note-timeline-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    border: 1px solid #bfd9f7;
+    background: #e8f3ff;
+    color: #124c90;
+    font-size: 11px;
+    line-height: 1.2;
+}
+
+.note-timeline-item strong {
+    font-weight: 700;
+}
+
+.note-timeline-item em {
+    font-style: normal;
+    color: #1d4f85;
+}
+
 .major-admin-panel {
     gap: 12px;
 }
