@@ -50,6 +50,8 @@ export type MetaState = {
     }
     selected_sources?: string[]
     supported_sources?: string[]
+    refresh_effective_from_month?: string | null
+    refresh_range_preserved?: boolean
 }
 
 export type RefreshHistoryItem = {

@@ -118,6 +118,73 @@ class DataService:
         normalized.insert(0, entry)
         return normalized[:limit]
 
+    @staticmethod
+    def _month_to_index(month_token: str) -> int | None:
+        normalized = str(month_token or "").strip()
+        if len(normalized) != 7:
+            return None
+        try:
+            year_str, month_str = normalized.split("-", maxsplit=1)
+            year = int(year_str)
+            month = int(month_str)
+        except (TypeError, ValueError):
+            return None
+        if year <= 0 or month < 1 or month > 12:
+            return None
+        return year * 12 + month
+
+    @staticmethod
+    def _index_to_month(index: int) -> str:
+        month = index % 12
+        year = index // 12
+        if month == 0:
+            month = 12
+            year -= 1
+        return f"{year:04d}-{month:02d}"
+
+    def _current_month_token(self) -> str:
+        return datetime.now().strftime("%Y-%m")
+
+    def _auto_refresh_effective_from_month(
+        self,
+        *,
+        all_months: bool,
+        months: int,
+        from_month: str | None,
+        triggered_by: str,
+    ) -> tuple[str | None, bool]:
+        requested_from_month = str(from_month or "").strip() or None
+        if all_months or requested_from_month:
+            return requested_from_month, False
+
+        if triggered_by not in {"scheduled", "auto_fallback"}:
+            return None, False
+
+        current_index = self._month_to_index(self._current_month_token())
+        if current_index is None:
+            return None, False
+
+        request_start_index = current_index - max(0, int(months) - 1)
+
+        meta = load_meta()
+        fetched_months = meta.get("fetched_months")
+        if not isinstance(fetched_months, list):
+            return None, False
+
+        historical_indexes = [
+            idx
+            for month in fetched_months
+            for idx in [self._month_to_index(str(month))]
+            if idx is not None
+        ]
+        if not historical_indexes:
+            return None, False
+
+        earliest_historical_index = min(historical_indexes)
+        if earliest_historical_index < request_start_index:
+            return self._index_to_month(earliest_historical_index), True
+        return None, False
+
     def _taxonomy_rules(self) -> list[dict[str, Any]]:
         payload = load_major_taxonomy()
         rules = payload.get("rules") if isinstance(payload, dict) else None
@@ -572,11 +639,19 @@ class DataService:
     ) -> dict[str, Any]:
         with self._lock:
             self._enforce_refresh_interval()
+            requested_from_month = str(from_month or "").strip() or None
+            effective_from_month, range_preserved = self._auto_refresh_effective_from_month(
+                all_months=all_months,
+                months=months,
+                from_month=requested_from_month,
+                triggered_by=triggered_by,
+            )
+            fetch_from_month = effective_from_month if effective_from_month else requested_from_month
             previous_rows = load_cases()
             fetch_result: FetchResult = fetch_cases(
                 all_months=all_months,
                 months=months,
-                from_month=from_month,
+                from_month=fetch_from_month,
                 sources=sources,
             )
             rows = fetch_result.rows
@@ -607,6 +682,9 @@ class DataService:
                     "total_cases": len(payload),
                     "fetched_month_count": len(fetch_result.fetched_months),
                     "selected_sources": fetch_result.selected_sources,
+                    "requested_from_month": requested_from_month,
+                    "effective_from_month": fetch_from_month,
+                    "range_preserved": range_preserved,
                 },
             }
 
@@ -617,7 +695,9 @@ class DataService:
                     "total_cases": len(payload),
                     "all_months": all_months,
                     "months_arg": months,
-                    "from_month": from_month,
+                    "from_month": requested_from_month,
+                    "refresh_effective_from_month": fetch_from_month,
+                    "refresh_range_preserved": range_preserved,
                     "requested_sources": sources,
                     "selected_sources": fetch_result.selected_sources,
                     "supported_sources": list_supported_sources(),
@@ -654,6 +734,8 @@ class DataService:
                 "month_limit": MAX_FETCH_MONTHS,
                 "generated_at": datetime.now(),
                 "detail_enrichment_started": detail_enrichment_started,
+                "effective_from_month": fetch_from_month,
+                "range_preserved": range_preserved,
             }
 
     def _enforce_refresh_interval(self) -> None:

@@ -104,7 +104,7 @@ describe('CaseTable', () => {
         expect(screen.getByText('I20').closest('td')).toHaveClass('case-col-tertiary')
     })
 
-    it('备注应同时展示原文与时间线', () => {
+    it('备注命中时间线时仅展示时间线卡片', () => {
         const timelineRows: CaseItem[] = [
             {
                 ...rows[0],
@@ -130,10 +130,82 @@ describe('CaseTable', () => {
             />
         )
 
-        expect(screen.getByText(/interview 2.5 Submit documents via email/i)).toBeInTheDocument()
         expect(screen.getByLabelText('时间线')).toBeInTheDocument()
         expect(screen.getByText('2.5')).toBeInTheDocument()
         expect(screen.getByText('3.18')).toBeInTheDocument()
+        expect(screen.queryByText(/interview 2.5 Submit documents via email/i)).not.toBeInTheDocument()
+    })
+
+    it('时间线默认折叠并支持展开收起', async () => {
+        const user = userEvent.setup()
+        const timelineRows: CaseItem[] = [
+            {
+                ...rows[0],
+                case_number: 'A003',
+                detail_note: 'interview 2.1 submit docs 2.2 dropoff 2.3 admin processing 2.4 approved 2.5 printed 2.6 picked up 2.7'
+            }
+        ]
+
+        render(
+            <CaseTable
+                rows={timelineRows}
+                total={1}
+                page={1}
+                pageSize={50}
+                localHasNoteOnly={false}
+                onLocalHasNoteOnlyChange={vi.fn()}
+                sortBy="check_date"
+                sortOrder="desc"
+                onSortByChange={vi.fn()}
+                onSortOrderChange={vi.fn()}
+                onPageChange={vi.fn()}
+                onPageSizeChange={vi.fn()}
+            />
+        )
+
+        expect(screen.queryByText('2.7')).not.toBeInTheDocument()
+        await user.click(screen.getByRole('button', { name: '展开全部时间线' }))
+        expect(screen.getByText('2.7')).toBeInTheDocument()
+        await user.click(screen.getByRole('button', { name: '收起时间线' }))
+        expect(screen.queryByText('2.7')).not.toBeInTheDocument()
+    })
+
+    it('无时间线备注使用多行预览并支持展开收起', async () => {
+        const user = userEvent.setup()
+        const longPlainNote = 'This note has no date markers but contains enough text to trigger preview mode. '.repeat(4)
+        const noTimelineRows: CaseItem[] = [
+            {
+                ...rows[0],
+                case_number: 'A004',
+                detail_note: longPlainNote
+            }
+        ]
+
+        const { container } = render(
+            <CaseTable
+                rows={noTimelineRows}
+                total={1}
+                page={1}
+                pageSize={50}
+                localHasNoteOnly={false}
+                onLocalHasNoteOnlyChange={vi.fn()}
+                sortBy="check_date"
+                sortOrder="desc"
+                onSortByChange={vi.fn()}
+                onSortOrderChange={vi.fn()}
+                onPageChange={vi.fn()}
+                onPageSizeChange={vi.fn()}
+            />
+        )
+
+        const noteElement = container.querySelector('.note-raw')
+        expect(noteElement).not.toBeNull()
+        expect(noteElement).toHaveClass('note-raw-collapsed')
+        expect(screen.queryByLabelText('时间线')).not.toBeInTheDocument()
+        await user.click(screen.getByRole('button', { name: '展开 Note' }))
+        expect(noteElement).toHaveClass('note-raw-expanded')
+        await user.click(screen.getByRole('button', { name: '收起 Note' }))
+        expect(noteElement).toHaveClass('note-raw-collapsed')
     })
 
     it('本地 Note 开关应触发 onLocalHasNoteOnlyChange', async () => {

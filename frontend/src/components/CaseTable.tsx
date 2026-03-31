@@ -1,4 +1,5 @@
 import type { CaseItem, CaseSortBy, CaseSortOrder } from '../types'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { frontendConfig } from '../config'
@@ -23,6 +24,9 @@ type NoteTimelineItem = {
     date: string
 }
 
+const NOTE_TIMELINE_PREVIEW_COUNT = 6
+const NOTE_RAW_PREVIEW_MIN_LENGTH = 140
+
 export default function CaseTable({
     rows,
     total,
@@ -39,16 +43,7 @@ export default function CaseTable({
 }: Props) {
     const { t } = useTranslation()
     const totalPages = Math.max(1, Math.ceil(total / pageSize))
-
-    const compactNote = (value: string, maxLength = 96): string => {
-        if (!value) {
-            return '-'
-        }
-        if (value.length <= maxLength) {
-            return value
-        }
-        return `${value.slice(0, maxLength - 3).trimEnd()}...`
-    }
+    const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
 
     const detailLocation = (city: string, state: string): string => {
         const parts = [city, state].filter(Boolean)
@@ -70,20 +65,20 @@ export default function CaseTable({
 
         const timeline: NoteTimelineItem[] = []
         const seen = new Set<string>()
-        const dateFirstRegex = /(?:^|[;,.。]\s*)(\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?)\s*[:：-]?\s*([A-Za-z\u4e00-\u9fa5][^.;。]{1,80})/g
-        const actionFirstRegex = /([A-Za-z\u4e00-\u9fa5][^.;。]{1,80}?)\s+(\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?)/g
+        const dateFirstRegex = /(?:^|[;,.。]\s*)(\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?)\s*[:：-]?\s*([A-Za-z\u4e00-\u9fa5][^.;。]{1,240})/g
+        const actionFirstRegex = /([A-Za-z\u4e00-\u9fa5][^.;。]{1,240}?)\s+(\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?)/g
 
         const pushTimeline = (date: string, action: string) => {
-            const compactAction = action.replace(/\s+/g, ' ').trim()
-            if (!compactAction) {
+            const normalizedAction = action.replace(/\s+/g, ' ').trim()
+            if (!normalizedAction) {
                 return
             }
-            const dedupeKey = `${date}::${compactAction.toLowerCase()}`
+            const dedupeKey = `${date}::${normalizedAction.toLowerCase()}`
             if (seen.has(dedupeKey)) {
                 return
             }
             seen.add(dedupeKey)
-            timeline.push({ date, action: compactAction })
+            timeline.push({ date, action: normalizedAction })
         }
 
         let match: RegExpExecArray | null
@@ -94,7 +89,12 @@ export default function CaseTable({
             pushTimeline(match[1], match[2])
         }
 
-        return timeline.slice(0, 5)
+        return timeline
+    }
+
+    const isRowExpanded = (rowKey: string): boolean => Boolean(expandedRows[rowKey])
+    const toggleRowExpanded = (rowKey: string): void => {
+        setExpandedRows((prev) => ({ ...prev, [rowKey]: !prev[rowKey] }))
     }
 
     return (
@@ -171,6 +171,14 @@ export default function CaseTable({
                     <tbody>
                         {rows.map((r) => {
                             const noteTimeline = buildNoteTimeline(r.detail_note)
+                            const rowKey = `${r.case_number}-${r.check_date}-${r.update_url || r.detail_url}`
+                            const expanded = isRowExpanded(rowKey)
+                            const hasTimeline = noteTimeline.length > 0
+                            const visibleTimeline = expanded
+                                ? noteTimeline
+                                : noteTimeline.slice(0, NOTE_TIMELINE_PREVIEW_COUNT)
+                            const showTimelineToggle = noteTimeline.length > NOTE_TIMELINE_PREVIEW_COUNT
+                            const showRawToggle = r.detail_note.length > NOTE_RAW_PREVIEW_MIN_LENGTH
                             return (
                                 <tr key={`${r.case_number}-${r.check_date}`}>
                                     <td className="case-col-case">{r.nickname}</td>
@@ -196,20 +204,45 @@ export default function CaseTable({
                                     <td className="case-col-check-date">{r.check_date}</td>
                                     <td className="case-col-complete-date case-col-optional">{r.complete_date}</td>
                                     <td className="case-col-calc-days case-col-optional">{r.waiting_days_calc || r.observed_days}</td>
-                                    <td className="case-col-note case-col-optional" title={r.detail_note || ''}>
+                                    <td className="case-col-note case-col-optional">
                                         {r.detail_note ? (
                                             <div className="note-cell">
-                                                <div className="note-raw">{compactNote(r.detail_note)}</div>
-                                                {noteTimeline.length > 0 ? (
-                                                    <div className="note-timeline" aria-label={t('cases.noteTimeline')}>
-                                                        {noteTimeline.map((item, index) => (
-                                                            <span className="note-timeline-item" key={`${item.date}-${item.action}-${index}`}>
-                                                                <strong>{item.date}</strong>
-                                                                <em>{compactNote(item.action, 36)}</em>
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                ) : null}
+                                                {hasTimeline ? (
+                                                    <>
+                                                        <div className="note-timeline" aria-label={t('cases.noteTimeline')}>
+                                                            {visibleTimeline.map((item, index) => (
+                                                                <div className="note-timeline-item" key={`${item.date}-${item.action}-${index}`}>
+                                                                    <strong>{item.date}</strong>
+                                                                    <em>{item.action}</em>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                        {showTimelineToggle ? (
+                                                            <button
+                                                                type="button"
+                                                                className="ghost note-toggle"
+                                                                onClick={() => toggleRowExpanded(rowKey)}
+                                                            >
+                                                                {expanded ? t('cases.collapseTimeline') : t('cases.expandTimeline')}
+                                                            </button>
+                                                        ) : null}
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <div className={`note-raw ${expanded ? 'note-raw-expanded' : 'note-raw-collapsed'}`}>
+                                                            {r.detail_note}
+                                                        </div>
+                                                        {showRawToggle ? (
+                                                            <button
+                                                                type="button"
+                                                                className="ghost note-toggle"
+                                                                onClick={() => toggleRowExpanded(rowKey)}
+                                                            >
+                                                                {expanded ? t('cases.collapseNote') : t('cases.expandNote')}
+                                                            </button>
+                                                        ) : null}
+                                                    </>
+                                                )}
                                             </div>
                                         ) : '-'}
                                     </td>
