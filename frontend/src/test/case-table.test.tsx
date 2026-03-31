@@ -142,7 +142,7 @@ describe('CaseTable', () => {
             {
                 ...rows[0],
                 case_number: 'A003',
-                detail_note: 'interview 2.1 submit docs 2.2 dropoff 2.3 admin processing 2.4 approved 2.5 printed 2.6 picked up 2.7'
+                detail_note: 'interview 2.1 submit docs 2.2 dropoff 2.3 admin processing 2.4 approved 2.5 printed 2.6 delivered 2.7'
             }
         ]
 
@@ -206,6 +206,70 @@ describe('CaseTable', () => {
         expect(noteElement).toHaveClass('note-raw-expanded')
         await user.click(screen.getByRole('button', { name: '收起 Note' }))
         expect(noteElement).toHaveClass('note-raw-collapsed')
+    })
+
+    it('应识别 YYYY-MM-DD 时间线并按日期升序展示', () => {
+        const timelineRows: CaseItem[] = [
+            {
+                ...rows[0],
+                case_number: 'A005',
+                detail_note: '2025-10-15 Refused under 221g 2026-01-06 Receive email to send passport back 2026-01-12 Approved 2026-01-14 Issued'
+            }
+        ]
+
+        const { container } = render(
+            <CaseTable
+                rows={timelineRows}
+                total={1}
+                page={1}
+                pageSize={50}
+                localHasNoteOnly={false}
+                onLocalHasNoteOnlyChange={vi.fn()}
+                sortBy="check_date"
+                sortOrder="desc"
+                onSortByChange={vi.fn()}
+                onSortOrderChange={vi.fn()}
+                onPageChange={vi.fn()}
+                onPageSizeChange={vi.fn()}
+            />
+        )
+
+        const timelineItems = Array.from(container.querySelectorAll('.note-timeline-item strong')).map((el) => el.textContent)
+        expect(timelineItems).toEqual(['2025-10-15', '2026-01-06', '2026-01-12', '2026-01-14'])
+        expect(screen.getByText('Refused under 221g')).toBeInTheDocument()
+        expect(screen.getByText('Receive email to send passport back')).toBeInTheDocument()
+        expect(screen.getByText('Approved')).toBeInTheDocument()
+        expect(screen.getByText('Issued')).toBeInTheDocument()
+    })
+
+    it('短无时间线备注不应出现展开按钮', () => {
+        const plainRows: CaseItem[] = [
+            {
+                ...rows[0],
+                case_number: 'A006',
+                detail_note: 'No timeline here, just a short note.'
+            }
+        ]
+
+        render(
+            <CaseTable
+                rows={plainRows}
+                total={1}
+                page={1}
+                pageSize={50}
+                localHasNoteOnly={false}
+                onLocalHasNoteOnlyChange={vi.fn()}
+                sortBy="check_date"
+                sortOrder="desc"
+                onSortByChange={vi.fn()}
+                onSortOrderChange={vi.fn()}
+                onPageChange={vi.fn()}
+                onPageSizeChange={vi.fn()}
+            />
+        )
+
+        expect(screen.queryByRole('button', { name: '展开 Note' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: '收起 Note' })).not.toBeInTheDocument()
     })
 
     it('本地 Note 开关应触发 onLocalHasNoteOnlyChange', async () => {

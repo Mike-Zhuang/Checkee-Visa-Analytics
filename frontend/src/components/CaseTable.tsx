@@ -25,7 +25,9 @@ type NoteTimelineItem = {
 }
 
 const NOTE_TIMELINE_PREVIEW_COUNT = 6
-const NOTE_RAW_PREVIEW_MIN_LENGTH = 140
+const NOTE_RAW_PREVIEW_MIN_LENGTH = 260
+const DATE_PATTERN_SOURCE = String.raw`(?<!\d)(?:\d{4}[./-]\d{1,2}[./-]\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|\d{1,2}[./-]\d{1,2})(?!\d)`
+const DATE_TOKEN_REGEX = new RegExp(DATE_PATTERN_SOURCE, 'g')
 
 export default function CaseTable({
     rows,
@@ -57,16 +59,59 @@ export default function CaseTable({
         return t('cases.classificationSourceUnknown')
     }
 
+    const parseTimelineDate = (dateToken: string): number | null => {
+        const normalized = dateToken.replace(/[./]/g, '-').trim()
+        const parts = normalized.split('-').map((part) => Number(part))
+        if (parts.length < 2 || parts.some((part) => Number.isNaN(part))) {
+            return null
+        }
+
+        let year = 0
+        let month = 0
+        let day = 0
+        if (parts[0] > 999 && parts.length >= 3) {
+            year = parts[0]
+            month = parts[1]
+            day = parts[2]
+        } else if (parts.length >= 3) {
+            month = parts[0]
+            day = parts[1]
+            year = parts[2]
+            if (year < 100) {
+                year += 2000
+            }
+        } else {
+            return null
+        }
+
+        if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1900 || year > 2100) {
+            return null
+        }
+        return Date.UTC(year, month - 1, day)
+    }
+
+    const shouldShowRawExpand = (note: string): boolean => {
+        const normalized = note.trim()
+        if (!normalized) {
+            return false
+        }
+        const newlineCount = (normalized.match(/\n/g) || []).length
+        if (newlineCount >= 3) {
+            return true
+        }
+        return normalized.length > NOTE_RAW_PREVIEW_MIN_LENGTH
+    }
+
     const buildNoteTimeline = (note: string): NoteTimelineItem[] => {
-        const normalized = note.replace(/\s+/g, ' ').trim()
+        const normalized = note.replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim()
         if (!normalized) {
             return []
         }
 
-        const timeline: NoteTimelineItem[] = []
+        type TimelineDraft = NoteTimelineItem & { order: number; sortValue: number | null }
+        const timeline: TimelineDraft[] = []
         const seen = new Set<string>()
-        const dateFirstRegex = /(?:^|[;,.。]\s*)(\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?)\s*[:：-]?\s*([A-Za-z\u4e00-\u9fa5][^.;。]{1,240})/g
-        const actionFirstRegex = /([A-Za-z\u4e00-\u9fa5][^.;。]{1,240}?)\s+(\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?)/g
+        let order = 0
 
         const pushTimeline = (date: string, action: string) => {
             const normalizedAction = action.replace(/\s+/g, ' ').trim()
@@ -78,18 +123,71 @@ export default function CaseTable({
                 return
             }
             seen.add(dedupeKey)
-            timeline.push({ date, action: normalizedAction })
+            timeline.push({
+                date,
+                action: normalizedAction,
+                order,
+                sortValue: parseTimelineDate(date)
+            })
+            order += 1
         }
 
-        let match: RegExpExecArray | null
-        while ((match = actionFirstRegex.exec(normalized)) !== null) {
-            pushTimeline(match[2], match[1])
+        const cleanActionText = (value: string): string => {
+            return value
+                .replace(/^[-–—:：\s]+/, '')
+                .replace(/\(clearance received[:：]?\s*[^)]*\)/gi, '')
+                .replace(/\s+/g, ' ')
+                .trim()
         }
-        while ((match = dateFirstRegex.exec(normalized)) !== null) {
-            pushTimeline(match[1], match[2])
+
+        const baseSegments = normalized
+            .split(/[\n;；。]+/g)
+            .map((segment) => segment.trim())
+            .filter(Boolean)
+
+        for (const baseSegment of baseSegments) {
+            const matches = Array.from(baseSegment.matchAll(DATE_TOKEN_REGEX))
+            if (matches.length === 0) {
+                continue
+            }
+
+            for (let index = 0; index < matches.length; index += 1) {
+                const current = matches[index]
+                const next = matches[index + 1]
+                const previous = matches[index - 1]
+                if (!current.index && current.index !== 0) {
+                    continue
+                }
+
+                const token = current[0]
+                const currentEnd = current.index + token.length
+                const nextStart = next && next.index !== undefined ? next.index : baseSegment.length
+                const previousEnd = previous && previous.index !== undefined ? previous.index + previous[0].length : 0
+
+                const after = cleanActionText(baseSegment.slice(currentEnd, nextStart))
+                const before = cleanActionText(baseSegment.slice(previousEnd, current.index))
+                const action = after || before
+                if (!action) {
+                    continue
+                }
+                pushTimeline(token, action)
+            }
         }
 
         return timeline
+            .sort((a, b) => {
+                if (a.sortValue !== null && b.sortValue !== null && a.sortValue !== b.sortValue) {
+                    return a.sortValue - b.sortValue
+                }
+                if (a.sortValue !== null && b.sortValue === null) {
+                    return -1
+                }
+                if (a.sortValue === null && b.sortValue !== null) {
+                    return 1
+                }
+                return a.order - b.order
+            })
+            .map((item) => ({ date: item.date, action: item.action }))
     }
 
     const isRowExpanded = (rowKey: string): boolean => Boolean(expandedRows[rowKey])
@@ -178,7 +276,7 @@ export default function CaseTable({
                                 ? noteTimeline
                                 : noteTimeline.slice(0, NOTE_TIMELINE_PREVIEW_COUNT)
                             const showTimelineToggle = noteTimeline.length > NOTE_TIMELINE_PREVIEW_COUNT
-                            const showRawToggle = r.detail_note.length > NOTE_RAW_PREVIEW_MIN_LENGTH
+                            const showRawToggle = shouldShowRawExpand(r.detail_note)
                             return (
                                 <tr key={`${r.case_number}-${r.check_date}`}>
                                     <td className="case-col-case">{r.nickname}</td>
