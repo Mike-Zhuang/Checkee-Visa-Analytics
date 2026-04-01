@@ -42,6 +42,7 @@ export const frontendConfig = {
     enableSensitivity: getBooleanEnv('VITE_ENABLE_SENSITIVITY', true),
     enableConsulateGroups: getBooleanEnv('VITE_ENABLE_CONSULATE_GROUPS', true),
     enablePublicRefresh: getBooleanEnv('VITE_ENABLE_PUBLIC_REFRESH', false),
+    enableUserAuth: getBooleanEnv('VITE_ENABLE_USER_AUTH', false),
     enableAdminPage: getBooleanEnv('VITE_ENABLE_ADMIN_PAGE', true),
     adminRoutePath: getStringEnv('VITE_ADMIN_ROUTE_PATH', '/admin-ops'),
     adminRequireAccessCode: getBooleanEnv('VITE_ADMIN_REQUIRE_ACCESS_CODE', false),

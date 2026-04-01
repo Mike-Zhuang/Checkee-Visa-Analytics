@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import storage
+from app.services import user_auth
 
 
 SAMPLE_CASES: list[dict[str, Any]] = [
@@ -127,6 +128,7 @@ def isolated_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(storage, "META_JSON", data_dir / "meta.json")
     monkeypatch.setattr(storage, "MAJOR_TAXONOMY_JSON", data_dir / "major_taxonomy_rules.json")
     monkeypatch.setattr(storage, "MAJOR_OVERRIDES_JSON", data_dir / "major_overrides.json")
+    monkeypatch.setattr(user_auth, "USER_DB_PATH", data_dir / "users.sqlite3")
 
 
 @pytest.fixture

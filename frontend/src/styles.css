@@ -391,6 +391,81 @@ body {
     font-weight: 600;
 }
 
+.user-auth-panel {
+    background: #f7fbff;
+    border: 1px solid #d5e5f2;
+    border-radius: 12px;
+    padding: 12px;
+    display: grid;
+    gap: 10px;
+}
+
+.user-auth-form,
+.user-auth-session,
+.user-preset-panel,
+.user-preset-create {
+    display: grid;
+    gap: 10px;
+}
+
+.user-auth-session {
+    align-items: start;
+}
+
+.user-auth-session strong {
+    color: #1a3d58;
+}
+
+.user-auth-session span {
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.user-auth-actions {
+    width: fit-content;
+}
+
+.error-inline {
+    margin: 0;
+    color: #a01f35;
+    font-size: 13px;
+}
+
+.success-inline {
+    margin: 0;
+    color: #1d6b3d;
+    font-size: 13px;
+}
+
+.user-preset-list {
+    display: grid;
+    gap: 8px;
+}
+
+.user-preset-item {
+    border: 1px solid #d9e6f2;
+    border-radius: 10px;
+    background: #fff;
+    padding: 10px;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+}
+
+.user-preset-item small {
+    display: block;
+    color: var(--muted);
+    margin-top: 4px;
+    font-size: 12px;
+}
+
+.empty-copy {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
 .filter-card,
 .panel {
     background: var(--card);
@@ -1868,6 +1943,19 @@ thead {
         grid-template-columns: 1fr;
     }
 
+    .user-preset-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .user-auth-actions {
+        width: 100%;
+    }
+
+    .user-auth-actions button {
+        flex: 1;
+    }
+
     .refresh-actions {
         min-width: 0;
         grid-template-columns: 1fr 1fr;
@@ -2009,6 +2097,10 @@ thead {
 
     .refresh-actions {
         grid-template-columns: 1fr;
+    }
+
+    .user-preset-create button {
+        width: 100%;
     }
 
     .filter-zone {

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -27,6 +27,57 @@ class AdminSessionResponse(BaseModel):
 class AdminSessionStateResponse(BaseModel):
     authenticated: bool
     expires_at: datetime
+
+
+class UserAuthRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=32)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class UserSessionResponse(BaseModel):
+    token: str
+    username: str
+    expires_at: datetime
+
+
+class UserSessionStateResponse(BaseModel):
+    authenticated: bool
+    username: str
+    expires_at: datetime
+
+
+class UserLogoutResponse(BaseModel):
+    success: bool
+    message: str
+
+
+class FilterPresetItem(BaseModel):
+    id: str
+    name: str
+    filters: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+
+class FilterPresetListResponse(BaseModel):
+    total: int
+    items: list[FilterPresetItem]
+
+
+class FilterPresetCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    filters: dict[str, Any]
+
+
+class FilterPresetUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    filters: dict[str, Any] | None = None
+
+
+class FilterPresetMutationResponse(BaseModel):
+    success: bool
+    message: str
+    item: FilterPresetItem | None = None
 
 
 class AdminLogoutResponse(BaseModel):

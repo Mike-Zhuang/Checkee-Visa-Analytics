@@ -9,6 +9,8 @@ import type {
     MajorClassificationsResponse,
     AdminStaleRefreshResponse,
     AdminSessionStateResponse,
+    UserSessionResponse,
+    UserSessionStateResponse,
     AnomalyItem,
     CaseItem,
     CohortItem,
@@ -21,7 +23,9 @@ import type {
     OptionsResponse,
     OverviewStats,
     RefreshPayload,
-    SensitivityItem
+    SensitivityItem,
+    UserFilterPresetListResponse,
+    UserFilterPresetMutationResponse
 } from './types'
 import { frontendConfig } from './config'
 
@@ -234,6 +238,118 @@ export async function logoutAdmin(adminToken: string): Promise<void> {
     if (!res.ok) {
         const detail = await parseErrorDetail(res)
         throw new Error(`admin logout failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+}
+
+export async function registerUser(username: string, password: string): Promise<UserSessionResponse> {
+    const res = await fetch(`${API_BASE}/user/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`user register failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as UserSessionResponse
+}
+
+export async function loginUser(username: string, password: string): Promise<UserSessionResponse> {
+    const res = await fetch(`${API_BASE}/user/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`user login failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as UserSessionResponse
+}
+
+export async function getUserSession(userToken: string): Promise<UserSessionStateResponse> {
+    const res = await fetch(`${API_BASE}/user/session`, {
+        headers: { Authorization: `Bearer ${userToken.trim()}` }
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`user session failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as UserSessionStateResponse
+}
+
+export async function logoutUser(userToken: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/user/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${userToken.trim()}` }
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`user logout failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+}
+
+export async function getUserFilterPresets(userToken: string): Promise<UserFilterPresetListResponse> {
+    const res = await fetch(`${API_BASE}/user/filter-presets`, {
+        headers: { Authorization: `Bearer ${userToken.trim()}` }
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`user filter presets failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as UserFilterPresetListResponse
+}
+
+export async function createUserFilterPreset(
+    userToken: string,
+    name: string,
+    filters: Filters
+): Promise<UserFilterPresetMutationResponse> {
+    const res = await fetch(`${API_BASE}/user/filter-presets`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${userToken.trim()}`
+        },
+        body: JSON.stringify({ name, filters })
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`user create preset failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as UserFilterPresetMutationResponse
+}
+
+export async function updateUserFilterPreset(
+    userToken: string,
+    presetId: string,
+    payload: { name?: string; filters?: Filters }
+): Promise<UserFilterPresetMutationResponse> {
+    const res = await fetch(`${API_BASE}/user/filter-presets/${encodeURIComponent(presetId)}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${userToken.trim()}`
+        },
+        body: JSON.stringify(payload)
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`user update preset failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as UserFilterPresetMutationResponse
+}
+
+export async function deleteUserFilterPreset(userToken: string, presetId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/user/filter-presets/${encodeURIComponent(presetId)}`, {
+        method: 'DELETE',
+        headers: {
+            Authorization: `Bearer ${userToken.trim()}`
+        }
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`user delete preset failed: ${res.status}${detail ? ` ${detail}` : ''}`)
     }
 }
 

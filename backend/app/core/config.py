@@ -64,6 +64,12 @@ CASES_CSV = DATA_DIR / "live_cases_all_visa.csv"
 MONTHLY_CSV = DATA_DIR / "live_monthly_all_visa.csv"
 REPORT_MD = DATA_DIR / "live_report_all_visa.md"
 META_JSON = DATA_DIR / "meta.json"
+USER_DB_PATH_RAW = os.getenv("CHECKEE_USER_DB_PATH")
+if USER_DB_PATH_RAW:
+    user_db_path = Path(USER_DB_PATH_RAW).expanduser()
+    USER_DB_PATH = user_db_path if user_db_path.is_absolute() else (BASE_DIR / user_db_path)
+else:
+    USER_DB_PATH = DATA_DIR / "users.sqlite3"
 
 APP_NAME = _env_str("CHECKEE_APP_NAME", "Checkee Analytics API")
 APP_VERSION = _env_str("CHECKEE_APP_VERSION", "0.5.8")
@@ -86,6 +92,10 @@ REFRESH_REQUIRE_ADMIN_KEY = _env_bool("CHECKEE_REFRESH_REQUIRE_ADMIN_KEY", False
 ADMIN_REFRESH_KEY = _env_str("CHECKEE_ADMIN_REFRESH_KEY", "")
 REFRESH_MIN_INTERVAL_SECONDS = _env_int("CHECKEE_REFRESH_MIN_INTERVAL_SECONDS", 300, minimum=0)
 ADMIN_SESSION_TTL_SECONDS = _env_int("CHECKEE_ADMIN_SESSION_TTL_SECONDS", 28800, minimum=300)
+ENABLE_USER_AUTH = _env_bool("CHECKEE_ENABLE_USER_AUTH", False)
+USER_SESSION_TTL_SECONDS = _env_int("CHECKEE_USER_SESSION_TTL_SECONDS", 2592000, minimum=600)
+USER_PASSWORD_MIN_LENGTH = _env_int("CHECKEE_USER_PASSWORD_MIN_LENGTH", 8, minimum=6)
+USER_MAX_FILTER_PRESETS = _env_int("CHECKEE_USER_MAX_FILTER_PRESETS", 50, minimum=1)
 
 BOOTSTRAP_SEED = _env_int("CHECKEE_BOOTSTRAP_SEED", 20260327)
 

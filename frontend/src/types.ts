@@ -203,6 +203,18 @@ export type AdminLoginResponse = {
     expires_at: string
 }
 
+export type UserSessionResponse = {
+    token: string
+    username: string
+    expires_at: string
+}
+
+export type UserSessionStateResponse = {
+    authenticated: boolean
+    username: string
+    expires_at: string
+}
+
 export type AdminSessionStateResponse = {
     authenticated: boolean
     expires_at: string
@@ -276,4 +288,23 @@ export type MajorClassificationsResponse = {
     items: MajorClassificationItem[]
     category_l1_options: string[]
     category_l2_options: string[]
+}
+
+export type UserFilterPresetItem = {
+    id: string
+    name: string
+    filters: Filters
+    created_at: string
+    updated_at: string
+}
+
+export type UserFilterPresetListResponse = {
+    total: number
+    items: UserFilterPresetItem[]
+}
+
+export type UserFilterPresetMutationResponse = {
+    success: boolean
+    message: string
+    item: UserFilterPresetItem | null
 }

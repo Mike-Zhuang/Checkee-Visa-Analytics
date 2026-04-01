@@ -14,6 +14,7 @@ from app.core.config import (
     API_DEFAULT_REFRESH_MONTHS,
     API_DEFAULT_CASES_LIMIT,
     API_MAX_CASES_LIMIT,
+    ENABLE_USER_AUTH,
     REFRESH_REQUIRE_ADMIN_KEY,
 )
 from app.core.schemas import (
@@ -25,6 +26,10 @@ from app.core.schemas import (
     MajorOverrideUpsertRequest,
     AdminSessionResponse,
     AdminSessionStateResponse,
+    FilterPresetCreateRequest,
+    FilterPresetListResponse,
+    FilterPresetMutationResponse,
+    FilterPresetUpdateRequest,
     AnomalyRow,
     CohortStatsRow,
     ComparisonResponse,
@@ -34,11 +39,23 @@ from app.core.schemas import (
     OptionsResponse,
     RefreshRequest,
     RefreshResponse,
+    UserAuthRequest,
+    UserLogoutResponse,
+    UserSessionResponse,
+    UserSessionStateResponse,
 )
 from app.services.data_service import service
 from app.services.data_service import RefreshRateLimitError
 from app.services.scraper import list_supported_sources
 from app.services.admin_auth import create_admin_session, get_session_expiry, revoke_admin_session
+from app.services.user_auth import (
+    UserAuthConflictError,
+    UserAuthLimitError,
+    UserAuthNotFoundError,
+    UserAuthUnauthorizedError,
+    UserAuthValidationError,
+    user_auth_service,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["checkee"])
 ADMIN_STALE_REFRESH_THRESHOLD_SECONDS = 6 * 60 * 60
@@ -183,6 +200,20 @@ def _require_admin_session(request: Request) -> datetime:
     return expires_at
 
 
+def _require_user_auth_enabled() -> None:
+    if not ENABLE_USER_AUTH:
+        raise HTTPException(status_code=404, detail="user auth feature is disabled")
+
+
+def _require_user_session(request: Request) -> dict:
+    _require_user_auth_enabled()
+    token = _extract_bearer_token(request.headers.get("Authorization"))
+    session = user_auth_service.get_session(token)
+    if session is None:
+        raise HTTPException(status_code=401, detail="user session invalid or expired")
+    return session
+
+
 @router.post("/admin/login", response_model=AdminSessionResponse)
 def admin_login(req: AdminLoginRequest, request: Request) -> AdminSessionResponse:
     required_key = ADMIN_REFRESH_KEY.strip()
@@ -217,6 +248,130 @@ def admin_logout(request: Request) -> AdminLogoutResponse:
         raise HTTPException(status_code=401, detail="admin session invalid or expired")
     revoke_admin_session(token)
     return AdminLogoutResponse(success=True, message="logout success")
+
+
+@router.post("/user/register", response_model=UserSessionResponse)
+def user_register(req: UserAuthRequest) -> UserSessionResponse:
+    _require_user_auth_enabled()
+    try:
+        session = user_auth_service.register(req.username, req.password)
+        return UserSessionResponse(
+            token=session.token,
+            username=session.username,
+            expires_at=session.expires_at,
+        )
+    except UserAuthConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except UserAuthValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/user/login", response_model=UserSessionResponse)
+def user_login(req: UserAuthRequest) -> UserSessionResponse:
+    _require_user_auth_enabled()
+    try:
+        session = user_auth_service.login(req.username, req.password)
+        return UserSessionResponse(
+            token=session.token,
+            username=session.username,
+            expires_at=session.expires_at,
+        )
+    except UserAuthUnauthorizedError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except UserAuthValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/user/session", response_model=UserSessionStateResponse)
+def user_session(request: Request) -> UserSessionStateResponse:
+    session = _require_user_session(request)
+    return UserSessionStateResponse(
+        authenticated=True,
+        username=str(session["username"]),
+        expires_at=str(session["expires_at"]),
+    )
+
+
+@router.post("/user/logout", response_model=UserLogoutResponse)
+def user_logout(request: Request) -> UserLogoutResponse:
+    _require_user_auth_enabled()
+    token = _extract_bearer_token(request.headers.get("Authorization"))
+    if not token:
+        raise HTTPException(status_code=401, detail="user session invalid or expired")
+    revoked = user_auth_service.logout(token)
+    if not revoked:
+        raise HTTPException(status_code=401, detail="user session invalid or expired")
+    return UserLogoutResponse(success=True, message="logout success")
+
+
+@router.get("/user/filter-presets", response_model=FilterPresetListResponse)
+def user_filter_presets(request: Request) -> FilterPresetListResponse:
+    session = _require_user_session(request)
+    items = user_auth_service.list_filter_presets(int(session["user_id"]))
+    return FilterPresetListResponse(total=len(items), items=items)
+
+
+@router.post("/user/filter-presets", response_model=FilterPresetMutationResponse)
+def user_create_filter_preset(
+    req: FilterPresetCreateRequest,
+    request: Request,
+) -> FilterPresetMutationResponse:
+    session = _require_user_session(request)
+    user_id = int(session["user_id"])
+    try:
+        item = user_auth_service.create_filter_preset(
+            user_id,
+            req.name,
+            req.filters,
+        )
+        return FilterPresetMutationResponse(success=True, message="preset created", item=item)
+    except UserAuthConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except UserAuthLimitError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except UserAuthValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.put("/user/filter-presets/{preset_id}", response_model=FilterPresetMutationResponse)
+def user_update_filter_preset(
+    preset_id: str,
+    req: FilterPresetUpdateRequest,
+    request: Request,
+) -> FilterPresetMutationResponse:
+    session = _require_user_session(request)
+    user_id = int(session["user_id"])
+    try:
+        item = user_auth_service.update_filter_preset(
+            user_id,
+            preset_id,
+            name=req.name,
+            filters=req.filters,
+        )
+        return FilterPresetMutationResponse(success=True, message="preset updated", item=item)
+    except UserAuthNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except UserAuthConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except UserAuthValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/user/filter-presets/{preset_id}", response_model=FilterPresetMutationResponse)
+def user_delete_filter_preset(
+    preset_id: str,
+    request: Request,
+) -> FilterPresetMutationResponse:
+    session = _require_user_session(request)
+    user_id = int(session["user_id"])
+    try:
+        deleted = user_auth_service.delete_filter_preset(user_id, preset_id)
+    except UserAuthValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="preset not found")
+    return FilterPresetMutationResponse(success=True, message="preset deleted")
 
 
 def _refresh_sources_from_meta(meta: dict) -> list[str]:

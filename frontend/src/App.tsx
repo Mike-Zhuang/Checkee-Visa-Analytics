@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
+    createUserFilterPreset,
+    deleteUserFilterPreset,
     exportCasesUrl,
     exportReportUrl,
     getAnomalies,
@@ -13,7 +15,12 @@ import {
     getMonthly,
     getOptions,
     getOverview,
+    getUserFilterPresets,
+    getUserSession,
+    loginUser,
     getSensitivity,
+    logoutUser,
+    registerUser,
     refreshData
 } from './api'
 import { frontendConfig } from './config'
@@ -41,7 +48,8 @@ import type {
     OptionsResponse,
     OverviewStats,
     RefreshPayload,
-    SensitivityItem
+    SensitivityItem,
+    UserFilterPresetItem
 } from './types'
 
 const EMPTY_FILTERS: Filters = {
@@ -59,6 +67,8 @@ const EMPTY_FILTERS: Filters = {
     has_note: false,
     search_text: ''
 }
+
+const USER_TOKEN_STORAGE_KEY = 'checkee-user-token'
 
 type ErrorKey =
     | 'overview'
@@ -145,6 +155,20 @@ export default function App() {
     const [caseSortBy, setCaseSortBy] = useState<CaseSortBy>('check_date')
     const [caseSortOrder, setCaseSortOrder] = useState<CaseSortOrder>('desc')
     const [glassTier, setGlassTier] = useState<GlassTier>(() => detectGlassTier())
+    const [userToken, setUserToken] = useState<string>(() => {
+        if (typeof window === 'undefined') return ''
+        return window.sessionStorage.getItem(USER_TOKEN_STORAGE_KEY) ?? ''
+    })
+    const [userNameInput, setUserNameInput] = useState('')
+    const [userPasswordInput, setUserPasswordInput] = useState('')
+    const [userName, setUserName] = useState('')
+    const [userSessionExpiresAt, setUserSessionExpiresAt] = useState<string | null>(null)
+    const [userAuthError, setUserAuthError] = useState<string | null>(null)
+    const [isUserAuthLoading, setIsUserAuthLoading] = useState(false)
+    const [userPresetName, setUserPresetName] = useState('')
+    const [userPresets, setUserPresets] = useState<UserFilterPresetItem[]>([])
+    const [isPresetLoading, setIsPresetLoading] = useState(false)
+    const [presetFeedback, setPresetFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
 
     useEffect(() => {
         const updateTier = () => setGlassTier(detectGlassTier())
@@ -174,6 +198,184 @@ export default function App() {
             return next
         })
     }
+
+    const clearUserSession = useCallback(() => {
+        setUserToken('')
+        setUserName('')
+        setUserSessionExpiresAt(null)
+        setUserPresets([])
+        if (typeof window !== 'undefined') {
+            window.sessionStorage.removeItem(USER_TOKEN_STORAGE_KEY)
+        }
+    }, [])
+
+    const loadUserPresets = useCallback(async (token: string) => {
+        setIsPresetLoading(true)
+        try {
+            const payload = await getUserFilterPresets(token)
+            setUserPresets(payload.items)
+            setPresetFeedback(null)
+        } catch (error) {
+            const message = error instanceof Error ? error.message : t('userAuth.presetLoadFailed')
+            setPresetFeedback({ kind: 'error', message: `${t('userAuth.presetLoadFailed')}: ${message}` })
+        } finally {
+            setIsPresetLoading(false)
+        }
+    }, [t])
+
+    const persistUserSession = useCallback((token: string, username: string, expiresAt: string) => {
+        setUserToken(token)
+        setUserName(username)
+        setUserSessionExpiresAt(expiresAt)
+        setUserAuthError(null)
+        setUserPasswordInput('')
+        if (typeof window !== 'undefined') {
+            window.sessionStorage.setItem(USER_TOKEN_STORAGE_KEY, token)
+        }
+    }, [])
+
+    const onUserRegister = useCallback(async () => {
+        const username = userNameInput.trim().toLowerCase()
+        const password = userPasswordInput
+        if (!username || !password) {
+            setUserAuthError(t('userAuth.inputRequired'))
+            return
+        }
+
+        setIsUserAuthLoading(true)
+        try {
+            const payload = await registerUser(username, password)
+            persistUserSession(payload.token, payload.username, payload.expires_at)
+            await loadUserPresets(payload.token)
+            setUserPresetName('')
+        } catch (error) {
+            const message = error instanceof Error ? error.message : t('userAuth.registerFailed')
+            setUserAuthError(`${t('userAuth.registerFailed')}: ${message}`)
+        } finally {
+            setIsUserAuthLoading(false)
+        }
+    }, [loadUserPresets, persistUserSession, t, userNameInput, userPasswordInput])
+
+    const onUserLogin = useCallback(async () => {
+        const username = userNameInput.trim().toLowerCase()
+        const password = userPasswordInput
+        if (!username || !password) {
+            setUserAuthError(t('userAuth.inputRequired'))
+            return
+        }
+
+        setIsUserAuthLoading(true)
+        try {
+            const payload = await loginUser(username, password)
+            persistUserSession(payload.token, payload.username, payload.expires_at)
+            await loadUserPresets(payload.token)
+            setUserPresetName('')
+        } catch (error) {
+            const message = error instanceof Error ? error.message : t('userAuth.loginFailed')
+            setUserAuthError(`${t('userAuth.loginFailed')}: ${message}`)
+        } finally {
+            setIsUserAuthLoading(false)
+        }
+    }, [loadUserPresets, persistUserSession, t, userNameInput, userPasswordInput])
+
+    const onUserLogout = useCallback(async () => {
+        if (!userToken.trim()) {
+            clearUserSession()
+            return
+        }
+
+        setIsUserAuthLoading(true)
+        try {
+            await logoutUser(userToken)
+        } catch {
+            // 前端会话会被清理，后端退出失败不阻断
+        } finally {
+            clearUserSession()
+            setIsUserAuthLoading(false)
+            setPresetFeedback(null)
+        }
+    }, [clearUserSession, userToken])
+
+    const onSaveCurrentPreset = useCallback(async () => {
+        if (!userToken.trim()) {
+            setPresetFeedback({ kind: 'error', message: t('userAuth.loginRequired') })
+            return
+        }
+
+        const name = userPresetName.trim()
+        if (!name) {
+            setPresetFeedback({ kind: 'error', message: t('userAuth.presetNameRequired') })
+            return
+        }
+
+        setIsPresetLoading(true)
+        try {
+            await createUserFilterPreset(userToken, name, draftFilters)
+            await loadUserPresets(userToken)
+            setPresetFeedback({ kind: 'success', message: t('userAuth.presetSaved') })
+            setUserPresetName('')
+        } catch (error) {
+            const message = error instanceof Error ? error.message : t('userAuth.presetSaveFailed')
+            setPresetFeedback({ kind: 'error', message: `${t('userAuth.presetSaveFailed')}: ${message}` })
+        } finally {
+            setIsPresetLoading(false)
+        }
+    }, [draftFilters, loadUserPresets, t, userPresetName, userToken])
+
+    const onLoadPresetFilters = useCallback((presetFilters: Filters) => {
+        setPage(1)
+        setDraftFilters(presetFilters)
+        setAppliedFilters(presetFilters)
+        setPresetFeedback({ kind: 'success', message: t('userAuth.presetApplied') })
+    }, [t])
+
+    const onDeletePreset = useCallback(async (presetId: string) => {
+        if (!userToken.trim()) {
+            setPresetFeedback({ kind: 'error', message: t('userAuth.loginRequired') })
+            return
+        }
+
+        setIsPresetLoading(true)
+        try {
+            await deleteUserFilterPreset(userToken, presetId)
+            await loadUserPresets(userToken)
+            setPresetFeedback({ kind: 'success', message: t('userAuth.presetDeleted') })
+        } catch (error) {
+            const message = error instanceof Error ? error.message : t('userAuth.presetDeleteFailed')
+            setPresetFeedback({ kind: 'error', message: `${t('userAuth.presetDeleteFailed')}: ${message}` })
+        } finally {
+            setIsPresetLoading(false)
+        }
+    }, [loadUserPresets, t, userToken])
+
+    useEffect(() => {
+        if (!frontendConfig.enableUserAuth) return
+        if (!userToken.trim()) return
+
+        let active = true
+        setIsUserAuthLoading(true)
+        void getUserSession(userToken)
+            .then(async (session) => {
+                if (!active) return
+                setUserName(session.username)
+                setUserSessionExpiresAt(session.expires_at)
+                setUserAuthError(null)
+                await loadUserPresets(userToken)
+            })
+            .catch(() => {
+                if (!active) return
+                clearUserSession()
+                setUserAuthError(t('userAuth.sessionExpired'))
+            })
+            .finally(() => {
+                if (!active) return
+                setIsUserAuthLoading(false)
+            })
+
+        return () => {
+            active = false
+        }
+    }, [clearUserSession, loadUserPresets, t, userToken])
 
     const formatReason = (reason: unknown): string => {
         if (!(reason instanceof Error)) {
@@ -483,6 +685,112 @@ export default function App() {
                     </div>
                 </details>
             </section>
+
+            {frontendConfig.enableUserAuth ? (
+                <section className="user-auth-panel" aria-label={t('userAuth.title')}>
+                    <div className="panel-head">
+                        <h3>{t('userAuth.title')}</h3>
+                        <p>{t('userAuth.hint')}</p>
+                    </div>
+                    {!userName ? (
+                        <div className="user-auth-form">
+                            <label className="field field-inline" htmlFor="user-auth-username">
+                                <span>{t('userAuth.username')}</span>
+                                <input
+                                    id="user-auth-username"
+                                    type="text"
+                                    value={userNameInput}
+                                    autoComplete="username"
+                                    placeholder={t('userAuth.usernamePlaceholder')}
+                                    onChange={(e) => setUserNameInput(e.currentTarget.value)}
+                                />
+                            </label>
+                            <label className="field field-inline" htmlFor="user-auth-password">
+                                <span>{t('userAuth.password')}</span>
+                                <input
+                                    id="user-auth-password"
+                                    type="password"
+                                    value={userPasswordInput}
+                                    autoComplete="current-password"
+                                    placeholder={t('userAuth.passwordPlaceholder')}
+                                    onChange={(e) => setUserPasswordInput(e.currentTarget.value)}
+                                />
+                            </label>
+                            <div className="actions compact user-auth-actions">
+                                <button type="button" className="ghost" disabled={isUserAuthLoading} onClick={() => void onUserRegister()}>
+                                    {t('userAuth.register')}
+                                </button>
+                                <button type="button" disabled={isUserAuthLoading} onClick={() => void onUserLogin()}>
+                                    {isUserAuthLoading ? t('userAuth.loading') : t('userAuth.login')}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="user-auth-session">
+                            <strong>{t('userAuth.loggedInAs', { username: userName })}</strong>
+                            <span>{t('userAuth.expiresAt', { value: userSessionExpiresAt ?? t('common.na') })}</span>
+                            <div className="actions compact user-auth-actions">
+                                <button type="button" className="ghost" disabled={isUserAuthLoading} onClick={() => void onUserLogout()}>
+                                    {t('userAuth.logout')}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="ghost"
+                                    disabled={isPresetLoading}
+                                    onClick={() => void loadUserPresets(userToken)}
+                                >
+                                    {t('userAuth.refreshPresets')}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {userAuthError ? <p className="error-inline">{userAuthError}</p> : null}
+
+                    {userName ? (
+                        <div className="user-preset-panel">
+                            <div className="user-preset-create">
+                                <label className="field field-inline" htmlFor="user-preset-name">
+                                    <span>{t('userAuth.presetName')}</span>
+                                    <input
+                                        id="user-preset-name"
+                                        type="text"
+                                        value={userPresetName}
+                                        placeholder={t('userAuth.presetNamePlaceholder')}
+                                        onChange={(e) => setUserPresetName(e.currentTarget.value)}
+                                    />
+                                </label>
+                                <button type="button" disabled={isPresetLoading} onClick={() => void onSaveCurrentPreset()}>
+                                    {t('userAuth.saveCurrentFilters')}
+                                </button>
+                            </div>
+                            {presetFeedback ? <p className={presetFeedback.kind === 'error' ? 'error-inline' : 'success-inline'}>{presetFeedback.message}</p> : null}
+                            <div className="user-preset-list">
+                                {userPresets.length === 0 ? (
+                                    <p className="empty-copy">{t('userAuth.noPresets')}</p>
+                                ) : (
+                                    userPresets.map((preset) => (
+                                        <div key={preset.id} className="user-preset-item">
+                                            <div>
+                                                <strong>{preset.name}</strong>
+                                                <small>{t('userAuth.presetUpdatedAt', { value: preset.updated_at })}</small>
+                                            </div>
+                                            <div className="actions compact">
+                                                <button type="button" className="ghost" onClick={() => onLoadPresetFilters(preset.filters)}>
+                                                    {t('userAuth.applyPreset')}
+                                                </button>
+                                                <button type="button" className="ghost" onClick={() => void onDeletePreset(preset.id)}>
+                                                    {t('userAuth.deletePreset')}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    ) : null}
+                </section>
+            ) : null}
 
             <section className="starter-guide" role="note" aria-label={t('guide.title')}>
                 <h3>{t('guide.title')}</h3>
