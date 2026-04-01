@@ -80,6 +80,65 @@ class FilterPresetMutationResponse(BaseModel):
     item: FilterPresetItem | None = None
 
 
+class UserSubscriptionItem(BaseModel):
+    id: str
+    preset_id: str
+    preset_name: str
+    channel: Literal["in_app"]
+    rule: dict[str, Any]
+    enabled: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class UserSubscriptionListResponse(BaseModel):
+    total: int
+    items: list[UserSubscriptionItem]
+
+
+class UserSubscriptionCreateRequest(BaseModel):
+    preset_id: str = Field(min_length=1)
+    channel: Literal["in_app"] = "in_app"
+    rule: dict[str, Any] | None = None
+    enabled: bool = True
+
+
+class UserSubscriptionUpdateRequest(BaseModel):
+    preset_id: str | None = Field(default=None, min_length=1)
+    channel: Literal["in_app"] | None = None
+    rule: dict[str, Any] | None = None
+    enabled: bool | None = None
+
+
+class UserSubscriptionMutationResponse(BaseModel):
+    success: bool
+    message: str
+    item: UserSubscriptionItem | None = None
+
+
+class UserNotificationItem(BaseModel):
+    id: str
+    subscription_id: str | None = None
+    level: Literal["info", "warning"]
+    title: str
+    body: str
+    read_at: datetime | None = None
+    created_at: datetime
+
+
+class UserNotificationListResponse(BaseModel):
+    total: int
+    unread_count: int
+    items: list[UserNotificationItem]
+
+
+class UserNotificationMutationResponse(BaseModel):
+    success: bool
+    message: str
+    updated: int = 0
+    item: UserNotificationItem | None = None
+
+
 class AdminLogoutResponse(BaseModel):
     success: bool
     message: str
@@ -100,6 +159,7 @@ class RefreshResponse(BaseModel):
     selected_sources: list[str]
     truncated_by_limit: bool = False
     month_limit: int
+    notification_created_count: int = 0
     generated_at: datetime
 
 

@@ -30,6 +30,12 @@ from app.core.schemas import (
     FilterPresetListResponse,
     FilterPresetMutationResponse,
     FilterPresetUpdateRequest,
+    UserNotificationListResponse,
+    UserNotificationMutationResponse,
+    UserSubscriptionCreateRequest,
+    UserSubscriptionListResponse,
+    UserSubscriptionMutationResponse,
+    UserSubscriptionUpdateRequest,
     AnomalyRow,
     CohortStatsRow,
     ComparisonResponse,
@@ -412,6 +418,119 @@ def user_delete_filter_preset(
     if not deleted:
         raise HTTPException(status_code=404, detail="preset not found")
     return FilterPresetMutationResponse(success=True, message="preset deleted")
+
+
+@router.get("/user/subscriptions", response_model=UserSubscriptionListResponse)
+def user_subscriptions(request: Request) -> UserSubscriptionListResponse:
+    session = _require_user_session(request)
+    items = user_auth_service.list_subscriptions(int(session["user_id"]))
+    return UserSubscriptionListResponse(total=len(items), items=items)
+
+
+@router.post("/user/subscriptions", response_model=UserSubscriptionMutationResponse)
+def user_create_subscription(
+    req: UserSubscriptionCreateRequest,
+    request: Request,
+) -> UserSubscriptionMutationResponse:
+    session = _require_user_session(request)
+    user_id = int(session["user_id"])
+    try:
+        item = user_auth_service.create_subscription(
+            user_id,
+            preset_id=req.preset_id,
+            channel=req.channel,
+            rule=req.rule,
+            enabled=req.enabled,
+        )
+        return UserSubscriptionMutationResponse(success=True, message="subscription created", item=item)
+    except UserAuthNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except UserAuthConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except UserAuthValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.put("/user/subscriptions/{subscription_id}", response_model=UserSubscriptionMutationResponse)
+def user_update_subscription(
+    subscription_id: str,
+    req: UserSubscriptionUpdateRequest,
+    request: Request,
+) -> UserSubscriptionMutationResponse:
+    session = _require_user_session(request)
+    user_id = int(session["user_id"])
+    try:
+        item = user_auth_service.update_subscription(
+            user_id,
+            subscription_id,
+            preset_id=req.preset_id,
+            channel=req.channel,
+            rule=req.rule,
+            enabled=req.enabled,
+        )
+        return UserSubscriptionMutationResponse(success=True, message="subscription updated", item=item)
+    except UserAuthNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except UserAuthConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except UserAuthValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/user/subscriptions/{subscription_id}", response_model=UserSubscriptionMutationResponse)
+def user_delete_subscription(
+    subscription_id: str,
+    request: Request,
+) -> UserSubscriptionMutationResponse:
+    session = _require_user_session(request)
+    user_id = int(session["user_id"])
+    try:
+        deleted = user_auth_service.delete_subscription(user_id, subscription_id)
+    except UserAuthValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="subscription not found")
+    return UserSubscriptionMutationResponse(success=True, message="subscription deleted")
+
+
+@router.get("/user/notifications", response_model=UserNotificationListResponse)
+def user_notifications(
+    request: Request,
+    unread_only: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> UserNotificationListResponse:
+    session = _require_user_session(request)
+    payload = user_auth_service.list_notifications(
+        int(session["user_id"]),
+        unread_only=unread_only,
+        limit=limit,
+        offset=offset,
+    )
+    return UserNotificationListResponse(**payload)
+
+
+@router.post("/user/notifications/{notification_id}/read", response_model=UserNotificationMutationResponse)
+def user_mark_notification_read(
+    notification_id: str,
+    request: Request,
+) -> UserNotificationMutationResponse:
+    session = _require_user_session(request)
+    try:
+        item = user_auth_service.mark_notification_read(int(session["user_id"]), notification_id)
+        return UserNotificationMutationResponse(success=True, message="notification marked as read", item=item, updated=1)
+    except UserAuthNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except UserAuthValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/user/notifications/read-all", response_model=UserNotificationMutationResponse)
+def user_mark_all_notifications_read(request: Request) -> UserNotificationMutationResponse:
+    session = _require_user_session(request)
+    updated = user_auth_service.mark_all_notifications_read(int(session["user_id"]))
+    return UserNotificationMutationResponse(success=True, message="all notifications marked as read", updated=updated)
 
 
 def _refresh_sources_from_meta(meta: dict) -> list[str]:

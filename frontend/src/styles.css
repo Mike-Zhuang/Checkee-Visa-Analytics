@@ -408,6 +408,107 @@ body {
     gap: 10px;
 }
 
+.subscription-panel,
+.notification-center {
+    border: 1px solid #d9e6f2;
+    border-radius: 10px;
+    background: #fff;
+    padding: 10px;
+    display: grid;
+    gap: 8px;
+}
+
+.subscription-create-row {
+    display: flex;
+    gap: 10px;
+    align-items: end;
+    flex-wrap: wrap;
+}
+
+.subscription-create-row .field-inline {
+    min-width: 240px;
+    flex: 1;
+}
+
+.subscription-create-row .field-inline select {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px 10px;
+    background: #fff;
+    min-height: 40px;
+}
+
+.subscription-list,
+.notify-list {
+    display: grid;
+    gap: 8px;
+}
+
+.subscription-item,
+.notify-item {
+    border: 1px solid #d9e6f2;
+    border-radius: 10px;
+    background: #fcfdff;
+    padding: 9px;
+    display: grid;
+    gap: 8px;
+}
+
+.subscription-item small {
+    display: block;
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.notify-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    align-items: center;
+}
+
+.notify-head span {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.notify-item p {
+    margin: 0;
+    color: #2d475e;
+    font-size: 13px;
+}
+
+.notify-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.notify-badge {
+    border: 1px solid #bfd9f7;
+    background: #e8f3ff;
+    color: #124c90;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.notify-read-tag {
+    border: 1px solid #b7e3c8;
+    background: #e9f8ee;
+    color: #1d6436;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.notify-item.level-warning {
+    border-color: #f2d3a2;
+    background: #fff9ef;
+}
+
 .user-auth-session {
     align-items: start;
 }
@@ -2088,6 +2189,20 @@ thead {
 
     .user-auth-actions button {
         flex: 1;
+    }
+
+    .subscription-create-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .subscription-create-row .field-inline {
+        min-width: 0;
+    }
+
+    .notify-head {
+        flex-direction: column;
+        align-items: flex-start;
     }
 
     .refresh-actions {

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
+    createUserSubscription,
     createUserFilterPreset,
+    deleteUserSubscription,
     deleteUserFilterPreset,
     exportCasesUrl,
     exportReportUrl,
@@ -17,12 +19,17 @@ import {
     getOverview,
     getRecommendation,
     getUserFilterPresets,
+    getUserNotifications,
+    getUserSubscriptions,
     getUserSession,
+    markAllUserNotificationsRead,
+    markUserNotificationRead,
     loginUser,
     getSensitivity,
     logoutUser,
     registerUser,
-    refreshData
+    refreshData,
+    updateUserSubscription,
 } from './api'
 import { frontendConfig } from './config'
 import CaseTable from './components/CaseTable'
@@ -34,6 +41,7 @@ import MonthlyChart from './components/MonthlyChart'
 import SensitivityTable from './components/SensitivityTable'
 import StatCards from './components/StatCards'
 import AnomalyTable from './components/AnomalyTable'
+import NotificationCenter from './components/NotificationCenter'
 import SuggestionPanel from './components/SuggestionPanel'
 import type {
     AnomalyItem,
@@ -52,7 +60,10 @@ import type {
     RecommendationResponse,
     RefreshPayload,
     SensitivityItem,
-    UserFilterPresetItem
+    UserFilterPresetItem,
+    UserNotificationItem,
+    UserSubscriptionItem,
+    UserSubscriptionRule
 } from './types'
 
 const EMPTY_FILTERS: Filters = {
@@ -82,6 +93,8 @@ type ErrorKey =
     | 'comparison'
     | 'anomalies'
     | 'recommendation'
+    | 'subscriptions'
+    | 'notifications'
     | 'metaState'
     | 'cases'
     | 'options'
@@ -89,6 +102,15 @@ type ErrorKey =
     | 'refresh'
 
 type GlassTier = 'full' | 'lite'
+
+const DEFAULT_SUBSCRIPTION_RULE: Partial<UserSubscriptionRule> = {
+    pending_ratio_delta_ge: 0.08,
+    median_days_delta_ge: 10,
+    p90_days_delta_ge: 15,
+    long_tail_ratio_delta_ge: 0.08,
+    min_sample_size: 20,
+    cooldown_hours: 24,
+}
 
 function detectGlassTier(): GlassTier {
     if (typeof window === 'undefined') {
@@ -174,6 +196,13 @@ export default function App() {
     const [userPresets, setUserPresets] = useState<UserFilterPresetItem[]>([])
     const [isPresetLoading, setIsPresetLoading] = useState(false)
     const [presetFeedback, setPresetFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
+    const [subscriptionPresetId, setSubscriptionPresetId] = useState('')
+    const [userSubscriptions, setUserSubscriptions] = useState<UserSubscriptionItem[]>([])
+    const [isSubscriptionLoading, setIsSubscriptionLoading] = useState(false)
+    const [subscriptionFeedback, setSubscriptionFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
+    const [userNotifications, setUserNotifications] = useState<UserNotificationItem[]>([])
+    const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
+    const [isNotificationLoading, setIsNotificationLoading] = useState(false)
 
     useEffect(() => {
         const updateTier = () => setGlassTier(detectGlassTier())
@@ -209,6 +238,10 @@ export default function App() {
         setUserName('')
         setUserSessionExpiresAt(null)
         setUserPresets([])
+        setUserSubscriptions([])
+        setUserNotifications([])
+        setUnreadNotificationCount(0)
+        setSubscriptionPresetId('')
         if (typeof window !== 'undefined') {
             window.sessionStorage.removeItem(USER_TOKEN_STORAGE_KEY)
         }
@@ -219,6 +252,9 @@ export default function App() {
         try {
             const payload = await getUserFilterPresets(token)
             setUserPresets(payload.items)
+            if (!subscriptionPresetId.trim() && payload.items.length > 0) {
+                setSubscriptionPresetId(payload.items[0].id)
+            }
             setPresetFeedback(null)
         } catch (error) {
             const message = error instanceof Error ? error.message : t('userAuth.presetLoadFailed')
@@ -226,7 +262,132 @@ export default function App() {
         } finally {
             setIsPresetLoading(false)
         }
+    }, [subscriptionPresetId, t])
+
+    const loadUserSubscriptions = useCallback(async (token: string) => {
+        setIsSubscriptionLoading(true)
+        try {
+            const payload = await getUserSubscriptions(token)
+            setUserSubscriptions(payload.items)
+            clearErrors(['subscriptions'])
+            setSubscriptionFeedback(null)
+        } catch (error) {
+            const message = error instanceof Error ? error.message : t('notify.subscriptionLoadFailed')
+            setError('subscriptions', t('errors.subscriptions', { message: formatReason(error) }))
+            setSubscriptionFeedback({ kind: 'error', message: `${t('notify.subscriptionLoadFailed')}: ${message}` })
+        } finally {
+            setIsSubscriptionLoading(false)
+        }
     }, [t])
+
+    const loadUserNotifications = useCallback(async (token: string) => {
+        setIsNotificationLoading(true)
+        try {
+            const payload = await getUserNotifications(token, { limit: 50 })
+            setUserNotifications(payload.items)
+            setUnreadNotificationCount(payload.unread_count)
+            clearErrors(['notifications'])
+        } catch (error) {
+            setError('notifications', t('errors.notifications', { message: formatReason(error) }))
+        } finally {
+            setIsNotificationLoading(false)
+        }
+    }, [t])
+
+    const onCreateSubscription = useCallback(async () => {
+        if (!userToken.trim()) {
+            setSubscriptionFeedback({ kind: 'error', message: t('userAuth.loginRequired') })
+            return
+        }
+        if (!subscriptionPresetId.trim()) {
+            setSubscriptionFeedback({ kind: 'error', message: t('notify.selectPresetRequired') })
+            return
+        }
+
+        setIsSubscriptionLoading(true)
+        try {
+            await createUserSubscription(userToken, {
+                preset_id: subscriptionPresetId,
+                channel: 'in_app',
+                rule: DEFAULT_SUBSCRIPTION_RULE,
+                enabled: true,
+            })
+            await loadUserSubscriptions(userToken)
+            setSubscriptionFeedback({ kind: 'success', message: t('notify.subscriptionCreated') })
+        } catch (error) {
+            const message = error instanceof Error ? error.message : t('notify.subscriptionCreateFailed')
+            setSubscriptionFeedback({ kind: 'error', message: `${t('notify.subscriptionCreateFailed')}: ${message}` })
+        } finally {
+            setIsSubscriptionLoading(false)
+        }
+    }, [loadUserSubscriptions, subscriptionPresetId, t, userToken])
+
+    const onToggleSubscription = useCallback(async (subscriptionId: string, nextEnabled: boolean) => {
+        if (!userToken.trim()) {
+            setSubscriptionFeedback({ kind: 'error', message: t('userAuth.loginRequired') })
+            return
+        }
+
+        setIsSubscriptionLoading(true)
+        try {
+            await updateUserSubscription(userToken, subscriptionId, { enabled: nextEnabled })
+            await loadUserSubscriptions(userToken)
+            setSubscriptionFeedback({
+                kind: 'success',
+                message: nextEnabled ? t('notify.subscriptionEnabled') : t('notify.subscriptionDisabled')
+            })
+        } catch (error) {
+            const message = error instanceof Error ? error.message : t('notify.subscriptionUpdateFailed')
+            setSubscriptionFeedback({ kind: 'error', message: `${t('notify.subscriptionUpdateFailed')}: ${message}` })
+        } finally {
+            setIsSubscriptionLoading(false)
+        }
+    }, [loadUserSubscriptions, t, userToken])
+
+    const onDeleteSubscription = useCallback(async (subscriptionId: string) => {
+        if (!userToken.trim()) {
+            setSubscriptionFeedback({ kind: 'error', message: t('userAuth.loginRequired') })
+            return
+        }
+
+        setIsSubscriptionLoading(true)
+        try {
+            await deleteUserSubscription(userToken, subscriptionId)
+            await loadUserSubscriptions(userToken)
+            setSubscriptionFeedback({ kind: 'success', message: t('notify.subscriptionDeleted') })
+        } catch (error) {
+            const message = error instanceof Error ? error.message : t('notify.subscriptionDeleteFailed')
+            setSubscriptionFeedback({ kind: 'error', message: `${t('notify.subscriptionDeleteFailed')}: ${message}` })
+        } finally {
+            setIsSubscriptionLoading(false)
+        }
+    }, [loadUserSubscriptions, t, userToken])
+
+    const onMarkNotificationRead = useCallback(async (notificationId: string) => {
+        if (!userToken.trim()) {
+            return
+        }
+
+        try {
+            await markUserNotificationRead(userToken, notificationId)
+            await loadUserNotifications(userToken)
+        } catch (error) {
+            setError('notifications', t('errors.notifications', { message: formatReason(error) }))
+        }
+    }, [loadUserNotifications, t, userToken])
+
+    const onMarkAllNotificationsRead = useCallback(async () => {
+        if (!userToken.trim()) {
+            return
+        }
+
+        try {
+            await markAllUserNotificationsRead(userToken)
+            await loadUserNotifications(userToken)
+        } catch (error) {
+            setError('notifications', t('errors.notifications', { message: formatReason(error) }))
+        }
+    }, [loadUserNotifications, t, userToken])
 
     const persistUserSession = useCallback((token: string, username: string, expiresAt: string) => {
         setUserToken(token)
@@ -252,6 +413,8 @@ export default function App() {
             const payload = await registerUser(username, password)
             persistUserSession(payload.token, payload.username, payload.expires_at)
             await loadUserPresets(payload.token)
+            await loadUserSubscriptions(payload.token)
+            await loadUserNotifications(payload.token)
             setUserPresetName('')
         } catch (error) {
             const message = error instanceof Error ? error.message : t('userAuth.registerFailed')
@@ -259,7 +422,7 @@ export default function App() {
         } finally {
             setIsUserAuthLoading(false)
         }
-    }, [loadUserPresets, persistUserSession, t, userNameInput, userPasswordInput])
+    }, [loadUserNotifications, loadUserPresets, loadUserSubscriptions, persistUserSession, t, userNameInput, userPasswordInput])
 
     const onUserLogin = useCallback(async () => {
         const username = userNameInput.trim().toLowerCase()
@@ -274,6 +437,8 @@ export default function App() {
             const payload = await loginUser(username, password)
             persistUserSession(payload.token, payload.username, payload.expires_at)
             await loadUserPresets(payload.token)
+            await loadUserSubscriptions(payload.token)
+            await loadUserNotifications(payload.token)
             setUserPresetName('')
         } catch (error) {
             const message = error instanceof Error ? error.message : t('userAuth.loginFailed')
@@ -281,7 +446,7 @@ export default function App() {
         } finally {
             setIsUserAuthLoading(false)
         }
-    }, [loadUserPresets, persistUserSession, t, userNameInput, userPasswordInput])
+    }, [loadUserNotifications, loadUserPresets, loadUserSubscriptions, persistUserSession, t, userNameInput, userPasswordInput])
 
     const onUserLogout = useCallback(async () => {
         if (!userToken.trim()) {
@@ -344,6 +509,8 @@ export default function App() {
         try {
             await deleteUserFilterPreset(userToken, presetId)
             await loadUserPresets(userToken)
+            await loadUserSubscriptions(userToken)
+            await loadUserNotifications(userToken)
             setPresetFeedback({ kind: 'success', message: t('userAuth.presetDeleted') })
         } catch (error) {
             const message = error instanceof Error ? error.message : t('userAuth.presetDeleteFailed')
@@ -351,7 +518,7 @@ export default function App() {
         } finally {
             setIsPresetLoading(false)
         }
-    }, [loadUserPresets, t, userToken])
+    }, [loadUserNotifications, loadUserPresets, loadUserSubscriptions, t, userToken])
 
     useEffect(() => {
         if (!frontendConfig.enableUserAuth) return
@@ -366,6 +533,8 @@ export default function App() {
                 setUserSessionExpiresAt(session.expires_at)
                 setUserAuthError(null)
                 await loadUserPresets(userToken)
+                await loadUserSubscriptions(userToken)
+                await loadUserNotifications(userToken)
             })
             .catch(() => {
                 if (!active) return
@@ -380,7 +549,7 @@ export default function App() {
         return () => {
             active = false
         }
-    }, [clearUserSession, loadUserPresets, t, userToken])
+    }, [clearUserSession, loadUserNotifications, loadUserPresets, loadUserSubscriptions, t, userToken])
 
     const formatReason = (reason: unknown): string => {
         if (!(reason instanceof Error)) {
@@ -592,6 +761,9 @@ export default function App() {
             setPage(1)
             await fetchOverviewBundle(appliedFilters)
             await fetchCasesPage(caseFilters, 1, pageSize, caseSortBy, caseSortOrder)
+            if (userToken.trim()) {
+                await loadUserNotifications(userToken)
+            }
             clearErrors(['refresh'])
             setRefreshFeedback({ kind: 'success', message: t('filter.refreshSuccess') })
         } catch (e) {
@@ -800,6 +972,89 @@ export default function App() {
                                     ))
                                 )}
                             </div>
+
+                            <div className="subscription-panel">
+                                <div className="panel-head">
+                                    <h4>{t('notify.subscriptionTitle')}</h4>
+                                    <p>{t('notify.subscriptionHint')}</p>
+                                </div>
+                                <div className="subscription-create-row">
+                                    <label className="field field-inline" htmlFor="subscription-preset-select">
+                                        <span>{t('notify.subscriptionPreset')}</span>
+                                        <select
+                                            id="subscription-preset-select"
+                                            value={subscriptionPresetId}
+                                            onChange={(e) => setSubscriptionPresetId(e.currentTarget.value)}
+                                        >
+                                            <option value="">{t('notify.selectPreset')}</option>
+                                            {userPresets.map((preset) => (
+                                                <option key={preset.id} value={preset.id}>{preset.name}</option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                    <button
+                                        type="button"
+                                        disabled={isSubscriptionLoading}
+                                        onClick={() => void onCreateSubscription()}
+                                    >
+                                        {t('notify.createSubscription')}
+                                    </button>
+                                </div>
+                                {subscriptionFeedback ? (
+                                    <p className={subscriptionFeedback.kind === 'error' ? 'error-inline' : 'success-inline'}>
+                                        {subscriptionFeedback.message}
+                                    </p>
+                                ) : null}
+                                <div className="subscription-list">
+                                    {userSubscriptions.length === 0 ? (
+                                        <p className="empty-copy">{t('notify.subscriptionEmpty')}</p>
+                                    ) : (
+                                        userSubscriptions.map((item) => (
+                                            <div key={item.id} className="subscription-item">
+                                                <div>
+                                                    <strong>{item.preset_name}</strong>
+                                                    <small>{t('notify.subscriptionUpdatedAt', { value: item.updated_at })}</small>
+                                                </div>
+                                                <div className="actions compact">
+                                                    <button
+                                                        type="button"
+                                                        className="ghost"
+                                                        disabled={isSubscriptionLoading}
+                                                        onClick={() => void onToggleSubscription(item.id, !item.enabled)}
+                                                    >
+                                                        {item.enabled ? t('notify.disableSubscription') : t('notify.enableSubscription')}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="ghost"
+                                                        disabled={isSubscriptionLoading}
+                                                        onClick={() => void onDeleteSubscription(item.id)}
+                                                    >
+                                                        {t('notify.deleteSubscription')}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+
+                            <NotificationCenter
+                                notifications={userNotifications}
+                                unreadCount={unreadNotificationCount}
+                                loading={isNotificationLoading}
+                                error={errors.notifications ?? null}
+                                onRefresh={() => {
+                                    if (!userToken.trim()) return
+                                    void loadUserNotifications(userToken)
+                                }}
+                                onMarkRead={(notificationId) => {
+                                    void onMarkNotificationRead(notificationId)
+                                }}
+                                onMarkAllRead={() => {
+                                    void onMarkAllNotificationsRead()
+                                }}
+                            />
                         </div>
                     ) : null}
                 </section>

@@ -197,3 +197,202 @@ def test_user_filter_presets_require_session(client, enable_user_auth) -> None:
         json={"name": "NoAuth", "filters": {}},
     )
     assert create_response.status_code == 401
+
+
+def test_user_subscriptions_crud(client, enable_user_auth) -> None:
+    register_response = client.post(
+        "/api/v1/user/register",
+        json={"username": "nina", "password": "password123"},
+    )
+    token = register_response.json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    preset_response = client.post(
+        "/api/v1/user/filter-presets",
+        headers=headers,
+        json={"name": "F1 Watch", "filters": {"visa_types": ["F1"]}},
+    )
+    preset_id = preset_response.json()["item"]["id"]
+
+    create_response = client.post(
+        "/api/v1/user/subscriptions",
+        headers=headers,
+        json={
+            "preset_id": preset_id,
+            "channel": "in_app",
+            "rule": {
+                "pending_ratio_delta_ge": 0.1,
+                "median_days_delta_ge": 8,
+                "p90_days_delta_ge": 12,
+                "long_tail_ratio_delta_ge": 0.05,
+                "min_sample_size": 5,
+            },
+            "enabled": True,
+        },
+    )
+    assert create_response.status_code == 200
+    item = create_response.json()["item"]
+    assert item["preset_id"] == preset_id
+    assert item["channel"] == "in_app"
+    assert item["enabled"] is True
+
+    list_response = client.get("/api/v1/user/subscriptions", headers=headers)
+    assert list_response.status_code == 200
+    assert list_response.json()["total"] == 1
+
+    subscription_id = item["id"]
+    update_response = client.put(
+        f"/api/v1/user/subscriptions/{subscription_id}",
+        headers=headers,
+        json={"enabled": False},
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["item"]["enabled"] is False
+
+    delete_response = client.delete(
+        f"/api/v1/user/subscriptions/{subscription_id}",
+        headers=headers,
+    )
+    assert delete_response.status_code == 200
+
+    list_after_delete = client.get("/api/v1/user/subscriptions", headers=headers)
+    assert list_after_delete.status_code == 200
+    assert list_after_delete.json()["total"] == 0
+
+
+def test_user_notifications_flow(client, enable_user_auth, seed_cases) -> None:
+    from app.services import storage
+    from app.services import user_auth
+
+    register_response = client.post(
+        "/api/v1/user/register",
+        json={"username": "omar", "password": "password123"},
+    )
+    token = register_response.json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    preset_response = client.post(
+        "/api/v1/user/filter-presets",
+        headers=headers,
+        json={"name": "F1 Notify", "filters": {"visa_types": ["F1"]}},
+    )
+    preset_id = preset_response.json()["item"]["id"]
+
+    subscription_response = client.post(
+        "/api/v1/user/subscriptions",
+        headers=headers,
+        json={
+            "preset_id": preset_id,
+            "channel": "in_app",
+            "rule": {
+                "pending_ratio_delta_ge": 0.0,
+                "median_days_delta_ge": 0.0,
+                "p90_days_delta_ge": 0.0,
+                "long_tail_ratio_delta_ge": 0.0,
+                "min_sample_size": 1,
+                "cooldown_hours": 1,
+            },
+            "enabled": True,
+        },
+    )
+    assert subscription_response.status_code == 200
+
+    rows = storage.load_cases()
+    created_count = user_auth.user_auth_service.evaluate_subscriptions(rows=rows, previous_rows=rows)
+    assert created_count == 1
+
+    notifications_response = client.get("/api/v1/user/notifications", headers=headers)
+    assert notifications_response.status_code == 200
+    payload = notifications_response.json()
+    assert payload["total"] == 1
+    assert payload["unread_count"] == 1
+    notification_id = payload["items"][0]["id"]
+    assert payload["items"][0]["read_at"] is None
+
+    mark_read_response = client.post(
+        f"/api/v1/user/notifications/{notification_id}/read",
+        headers=headers,
+    )
+    assert mark_read_response.status_code == 200
+    assert mark_read_response.json()["item"]["read_at"] is not None
+
+    unread_response = client.get(
+        "/api/v1/user/notifications",
+        headers=headers,
+        params={"unread_only": "true"},
+    )
+    assert unread_response.status_code == 200
+    assert unread_response.json()["total"] == 0
+
+
+def test_data_service_refresh_triggers_subscription_evaluation(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services.data_service import DataService
+    from app.services.scraper import CaseRow, FetchResult
+
+    service = DataService()
+    captured: dict[str, int] = {}
+
+    def fake_fetch_cases(*, all_months: bool, months: int, from_month: str | None, sources: list[str] | None) -> FetchResult:
+        return FetchResult(
+            rows=[
+                CaseRow(
+                    source_month="2026-03",
+                    case_number="Z001",
+                    nickname="zeta",
+                    visa_type="F1",
+                    visa_entry="I20",
+                    consulate="BeiJing",
+                    major="CS",
+                    status="Pending",
+                    check_date="2026-03-01",
+                    complete_date="",
+                    waiting_days_reported="",
+                    waiting_days_calc="",
+                    observed_days="20",
+                    event=0,
+                    detail_url="https://example.com/detail/Z001",
+                    update_url="https://example.com/update/Z001",
+                    detail_employer="",
+                    detail_note="",
+                    detail_city="",
+                    detail_state="",
+                )
+            ],
+            fetched_months=["2026-03"],
+            truncated_by_limit=False,
+            selected_sources=["monthly_track"],
+            source_discovery={},
+            coverage={
+                "selected_sources": ["monthly_track"],
+                "available_month_count": 1,
+                "selected_month_count": 1,
+                "parsed_month_count": 1,
+                "months_with_rows": ["2026-03"],
+                "months_without_rows": [],
+                "raw_case_count": 1,
+                "deduped_case_count": 1,
+                "dedup_removed_count": 0,
+                "detail_deferred": False,
+            },
+        )
+
+    def fake_evaluate(*, rows, previous_rows):
+        captured["rows"] = len(rows)
+        captured["previous_rows"] = len(previous_rows)
+        return 3
+
+    monkeypatch.setattr(service, "_enforce_refresh_interval", lambda: None)
+    monkeypatch.setattr("app.services.data_service.fetch_cases", fake_fetch_cases)
+    monkeypatch.setattr("app.services.data_service.user_auth_service.evaluate_subscriptions", fake_evaluate)
+
+    result = service.refresh(
+        all_months=False,
+        months=1,
+        from_month=None,
+        sources=["monthly_track"],
+        triggered_by="manual",
+    )
+
+    assert captured["rows"] == 1
+    assert captured["previous_rows"] == 0
+    assert result["notification_created_count"] == 3

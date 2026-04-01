@@ -26,7 +26,12 @@ import type {
     RefreshPayload,
     SensitivityItem,
     UserFilterPresetListResponse,
-    UserFilterPresetMutationResponse
+    UserFilterPresetMutationResponse,
+    UserNotificationListResponse,
+    UserNotificationMutationResponse,
+    UserSubscriptionListResponse,
+    UserSubscriptionMutationResponse,
+    UserSubscriptionRule
 } from './types'
 import { frontendConfig } from './config'
 
@@ -352,6 +357,132 @@ export async function deleteUserFilterPreset(userToken: string, presetId: string
         const detail = await parseErrorDetail(res)
         throw new Error(`user delete preset failed: ${res.status}${detail ? ` ${detail}` : ''}`)
     }
+}
+
+export async function getUserSubscriptions(userToken: string): Promise<UserSubscriptionListResponse> {
+    const res = await fetch(`${API_BASE}/user/subscriptions`, {
+        headers: { Authorization: `Bearer ${userToken.trim()}` }
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`user subscriptions failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as UserSubscriptionListResponse
+}
+
+export async function createUserSubscription(
+    userToken: string,
+    payload: {
+        preset_id: string
+        channel?: 'in_app'
+        rule?: Partial<UserSubscriptionRule>
+        enabled?: boolean
+    }
+): Promise<UserSubscriptionMutationResponse> {
+    const res = await fetch(`${API_BASE}/user/subscriptions`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${userToken.trim()}`
+        },
+        body: JSON.stringify(payload)
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`user create subscription failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as UserSubscriptionMutationResponse
+}
+
+export async function updateUserSubscription(
+    userToken: string,
+    subscriptionId: string,
+    payload: {
+        preset_id?: string
+        channel?: 'in_app'
+        rule?: Partial<UserSubscriptionRule>
+        enabled?: boolean
+    }
+): Promise<UserSubscriptionMutationResponse> {
+    const res = await fetch(`${API_BASE}/user/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${userToken.trim()}`
+        },
+        body: JSON.stringify(payload)
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`user update subscription failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as UserSubscriptionMutationResponse
+}
+
+export async function deleteUserSubscription(userToken: string, subscriptionId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/user/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+        method: 'DELETE',
+        headers: {
+            Authorization: `Bearer ${userToken.trim()}`
+        }
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`user delete subscription failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+}
+
+export async function getUserNotifications(
+    userToken: string,
+    options: { unreadOnly?: boolean; limit?: number; offset?: number } = {}
+): Promise<UserNotificationListResponse> {
+    const params = new URLSearchParams()
+    if (options.unreadOnly) {
+        params.set('unread_only', 'true')
+    }
+    if (typeof options.limit === 'number') {
+        params.set('limit', String(options.limit))
+    }
+    if (typeof options.offset === 'number') {
+        params.set('offset', String(options.offset))
+    }
+    const suffix = params.toString() ? `?${params.toString()}` : ''
+
+    const res = await fetch(`${API_BASE}/user/notifications${suffix}`, {
+        headers: { Authorization: `Bearer ${userToken.trim()}` }
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`user notifications failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as UserNotificationListResponse
+}
+
+export async function markUserNotificationRead(
+    userToken: string,
+    notificationId: string
+): Promise<UserNotificationMutationResponse> {
+    const res = await fetch(`${API_BASE}/user/notifications/${encodeURIComponent(notificationId)}/read`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${userToken.trim()}` }
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`user notification read failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as UserNotificationMutationResponse
+}
+
+export async function markAllUserNotificationsRead(userToken: string): Promise<UserNotificationMutationResponse> {
+    const res = await fetch(`${API_BASE}/user/notifications/read-all`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${userToken.trim()}` }
+    })
+    if (!res.ok) {
+        const detail = await parseErrorDetail(res)
+        throw new Error(`user notifications read-all failed: ${res.status}${detail ? ` ${detail}` : ''}`)
+    }
+    return await res.json() as UserNotificationMutationResponse
 }
 
 export async function getAdminMajorClassifications(

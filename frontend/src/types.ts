@@ -344,3 +344,59 @@ export type UserFilterPresetMutationResponse = {
     message: string
     item: UserFilterPresetItem | null
 }
+
+export type UserSubscriptionChannel = 'in_app'
+
+export type UserSubscriptionRule = {
+    pending_ratio_delta_ge: number
+    median_days_delta_ge: number
+    p90_days_delta_ge: number
+    long_tail_ratio_delta_ge: number
+    min_sample_size: number
+    cooldown_hours: number
+}
+
+export type UserSubscriptionItem = {
+    id: string
+    preset_id: string
+    preset_name: string
+    channel: UserSubscriptionChannel
+    rule: UserSubscriptionRule
+    enabled: boolean
+    created_at: string
+    updated_at: string
+}
+
+export type UserSubscriptionListResponse = {
+    total: number
+    items: UserSubscriptionItem[]
+}
+
+export type UserSubscriptionMutationResponse = {
+    success: boolean
+    message: string
+    item: UserSubscriptionItem | null
+}
+
+export type UserNotificationItem = {
+    id: string
+    subscription_id: string | null
+    level: 'info' | 'warning'
+    title: string
+    body: string
+    read_at: string | null
+    created_at: string
+}
+
+export type UserNotificationListResponse = {
+    total: number
+    unread_count: number
+    items: UserNotificationItem[]
+}
+
+export type UserNotificationMutationResponse = {
+    success: boolean
+    message: string
+    updated: number
+    item: UserNotificationItem | null
+}

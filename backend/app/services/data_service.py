@@ -14,6 +14,7 @@ from app.services.scraper import (
     fetch_cases,
     list_supported_sources,
 )
+from app.services.user_auth import user_auth_service
 from app.services.storage import (
     load_cases,
     load_major_overrides,
@@ -724,6 +725,19 @@ class DataService:
             if bool(fetch_result.coverage.get("detail_deferred")) and not DETAIL_FETCH_SYNC_ON_REFRESH:
                 detail_enrichment_started = self._start_detail_enrichment_job()
 
+            notification_created_count = 0
+            try:
+                notification_created_count = user_auth_service.evaluate_subscriptions(
+                    rows=payload,
+                    previous_rows=previous_rows,
+                )
+            except Exception as exc:  # noqa: BLE001
+                self.record_refresh_event(
+                    status="error",
+                    message=f"subscription evaluation failed: {exc}",
+                    triggered_by=triggered_by,
+                )
+
             return {
                 "success": True,
                 "message": "refresh completed",
@@ -734,6 +748,7 @@ class DataService:
                 "month_limit": MAX_FETCH_MONTHS,
                 "generated_at": datetime.now(),
                 "detail_enrichment_started": detail_enrichment_started,
+                "notification_created_count": notification_created_count,
                 "effective_from_month": fetch_from_month,
                 "range_preserved": range_preserved,
             }

@@ -19,6 +19,7 @@ from app.core.config import (
     USER_PASSWORD_MIN_LENGTH,
     USER_SESSION_TTL_SECONDS,
 )
+from app.services import analytics
 
 
 class UserAuthError(ValueError):
@@ -56,6 +57,14 @@ class UserSession:
 class UserAuthService:
     _USERNAME_PATTERN = re.compile(r"^[a-z0-9_.-]{3,32}$")
     _PASSWORD_HASH_ITERATIONS = 120_000
+    _DEFAULT_SUBSCRIPTION_RULE = {
+        "pending_ratio_delta_ge": 0.08,
+        "median_days_delta_ge": 10.0,
+        "p90_days_delta_ge": 15.0,
+        "long_tail_ratio_delta_ge": 0.08,
+        "min_sample_size": 20,
+        "cooldown_hours": 24,
+    }
 
     def __init__(self) -> None:
         self._lock = RLock()
@@ -82,6 +91,49 @@ class UserAuthService:
         if len(normalized) < 1 or len(normalized) > 80:
             raise UserAuthValidationError("preset name length must be between 1 and 80")
         return normalized
+
+    @staticmethod
+    def _normalize_subscription_channel(channel: str) -> str:
+        normalized = (channel or "").strip().lower()
+        if normalized != "in_app":
+            raise UserAuthValidationError("subscription channel must be in_app")
+        return normalized
+
+    @classmethod
+    def _normalize_subscription_rule(cls, rule: dict[str, Any] | None) -> dict[str, Any]:
+        payload = dict(cls._DEFAULT_SUBSCRIPTION_RULE)
+        if rule is None:
+            return payload
+        if not isinstance(rule, dict):
+            raise UserAuthValidationError("subscription rule must be an object")
+
+        def _read_float(key: str, minimum: float, maximum: float) -> float:
+            raw = rule.get(key)
+            if raw is None:
+                return float(payload[key])
+            try:
+                parsed = float(raw)
+            except (TypeError, ValueError):
+                raise UserAuthValidationError(f"subscription rule {key} must be a number")
+            return max(minimum, min(maximum, parsed))
+
+        def _read_int(key: str, minimum: int, maximum: int) -> int:
+            raw = rule.get(key)
+            if raw is None:
+                return int(payload[key])
+            try:
+                parsed = int(raw)
+            except (TypeError, ValueError):
+                raise UserAuthValidationError(f"subscription rule {key} must be an integer")
+            return max(minimum, min(maximum, parsed))
+
+        payload["pending_ratio_delta_ge"] = _read_float("pending_ratio_delta_ge", 0.0, 1.0)
+        payload["median_days_delta_ge"] = _read_float("median_days_delta_ge", 0.0, 365.0)
+        payload["p90_days_delta_ge"] = _read_float("p90_days_delta_ge", 0.0, 730.0)
+        payload["long_tail_ratio_delta_ge"] = _read_float("long_tail_ratio_delta_ge", 0.0, 1.0)
+        payload["min_sample_size"] = _read_int("min_sample_size", 1, 5000)
+        payload["cooldown_hours"] = _read_int("cooldown_hours", 1, 168)
+        return payload
 
     def _validate_password(self, password: str) -> str:
         normalized = password or ""
@@ -209,6 +261,11 @@ class UserAuthService:
                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
                 FOREIGN KEY(preset_id) REFERENCES user_filter_presets(id) ON DELETE CASCADE
             );
+
+            CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user_enabled
+                ON user_subscriptions(user_id, enabled, updated_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_user_subscriptions_preset
+                ON user_subscriptions(preset_id);
 
             CREATE TABLE IF NOT EXISTS user_notifications (
                 id TEXT PRIMARY KEY,
@@ -470,6 +527,501 @@ class UserAuthService:
                 (user_id, normalized_id),
             )
             return cursor.rowcount > 0
+
+    def _subscription_from_row(self, row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "id": str(row["id"]),
+            "preset_id": str(row["preset_id"]),
+            "preset_name": str(row["preset_name"]),
+            "channel": str(row["channel"]),
+            "rule": self._parse_filters(str(row["rule_json"])),
+            "enabled": bool(int(row["enabled"])),
+            "created_at": str(row["created_at"]),
+            "updated_at": str(row["updated_at"]),
+        }
+
+    def list_subscriptions(self, user_id: int) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT s.id, s.preset_id, p.name AS preset_name, s.channel, s.rule_json,
+                       s.enabled, s.created_at, s.updated_at
+                FROM user_subscriptions s
+                JOIN user_filter_presets p ON p.id = s.preset_id AND p.user_id = s.user_id
+                WHERE s.user_id = ?
+                ORDER BY s.updated_at DESC, s.created_at DESC
+                """,
+                (user_id,),
+            ).fetchall()
+            return [self._subscription_from_row(row) for row in rows]
+
+    def create_subscription(
+        self,
+        user_id: int,
+        *,
+        preset_id: str,
+        channel: str = "in_app",
+        rule: dict[str, Any] | None = None,
+        enabled: bool = True,
+    ) -> dict[str, Any]:
+        normalized_preset_id = (preset_id or "").strip()
+        if not normalized_preset_id:
+            raise UserAuthValidationError("preset id is required")
+
+        normalized_channel = self._normalize_subscription_channel(channel)
+        normalized_rule = self._normalize_subscription_rule(rule)
+        now_iso = self._now_utc().isoformat(timespec="seconds")
+        subscription_id = uuid4().hex
+
+        with self._connect() as conn:
+            preset_row = conn.execute(
+                "SELECT id FROM user_filter_presets WHERE user_id = ? AND id = ?",
+                (user_id, normalized_preset_id),
+            ).fetchone()
+            if preset_row is None:
+                raise UserAuthNotFoundError("preset not found")
+
+            duplicate = conn.execute(
+                """
+                SELECT id
+                FROM user_subscriptions
+                WHERE user_id = ? AND preset_id = ? AND channel = ?
+                """,
+                (user_id, normalized_preset_id, normalized_channel),
+            ).fetchone()
+            if duplicate is not None:
+                raise UserAuthConflictError("subscription already exists")
+
+            conn.execute(
+                """
+                INSERT INTO user_subscriptions (
+                    id, user_id, preset_id, channel, rule_json, enabled, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    subscription_id,
+                    user_id,
+                    normalized_preset_id,
+                    normalized_channel,
+                    json.dumps(normalized_rule, ensure_ascii=False, separators=(",", ":")),
+                    1 if enabled else 0,
+                    now_iso,
+                    now_iso,
+                ),
+            )
+
+            created = conn.execute(
+                """
+                SELECT s.id, s.preset_id, p.name AS preset_name, s.channel, s.rule_json,
+                       s.enabled, s.created_at, s.updated_at
+                FROM user_subscriptions s
+                JOIN user_filter_presets p ON p.id = s.preset_id AND p.user_id = s.user_id
+                WHERE s.user_id = ? AND s.id = ?
+                """,
+                (user_id, subscription_id),
+            ).fetchone()
+            if created is None:
+                raise UserAuthError("subscription create failed")
+            return self._subscription_from_row(created)
+
+    def update_subscription(
+        self,
+        user_id: int,
+        subscription_id: str,
+        *,
+        preset_id: str | None = None,
+        channel: str | None = None,
+        rule: dict[str, Any] | None = None,
+        enabled: bool | None = None,
+    ) -> dict[str, Any]:
+        normalized_subscription_id = (subscription_id or "").strip()
+        if not normalized_subscription_id:
+            raise UserAuthValidationError("subscription id is required")
+
+        with self._connect() as conn:
+            current = conn.execute(
+                """
+                SELECT s.id, s.preset_id, p.name AS preset_name, s.channel, s.rule_json,
+                       s.enabled, s.created_at, s.updated_at
+                FROM user_subscriptions s
+                JOIN user_filter_presets p ON p.id = s.preset_id AND p.user_id = s.user_id
+                WHERE s.user_id = ? AND s.id = ?
+                """,
+                (user_id, normalized_subscription_id),
+            ).fetchone()
+            if current is None:
+                raise UserAuthNotFoundError("subscription not found")
+
+            next_preset_id = str(current["preset_id"])
+            if preset_id is not None:
+                next_preset_id = (preset_id or "").strip()
+                if not next_preset_id:
+                    raise UserAuthValidationError("preset id is required")
+                preset_row = conn.execute(
+                    "SELECT id FROM user_filter_presets WHERE user_id = ? AND id = ?",
+                    (user_id, next_preset_id),
+                ).fetchone()
+                if preset_row is None:
+                    raise UserAuthNotFoundError("preset not found")
+
+            next_channel = str(current["channel"])
+            if channel is not None:
+                next_channel = self._normalize_subscription_channel(channel)
+
+            next_rule = self._parse_filters(str(current["rule_json"]))
+            if rule is not None:
+                next_rule = self._normalize_subscription_rule(rule)
+
+            next_enabled = bool(int(current["enabled"])) if enabled is None else bool(enabled)
+
+            if (
+                preset_id is None
+                and channel is None
+                and rule is None
+                and enabled is None
+            ):
+                raise UserAuthValidationError("at least one field must be provided")
+
+            duplicate = conn.execute(
+                """
+                SELECT id
+                FROM user_subscriptions
+                WHERE user_id = ? AND preset_id = ? AND channel = ? AND id != ?
+                """,
+                (user_id, next_preset_id, next_channel, normalized_subscription_id),
+            ).fetchone()
+            if duplicate is not None:
+                raise UserAuthConflictError("subscription already exists")
+
+            conn.execute(
+                """
+                UPDATE user_subscriptions
+                SET preset_id = ?, channel = ?, rule_json = ?, enabled = ?, updated_at = ?
+                WHERE user_id = ? AND id = ?
+                """,
+                (
+                    next_preset_id,
+                    next_channel,
+                    json.dumps(next_rule, ensure_ascii=False, separators=(",", ":")),
+                    1 if next_enabled else 0,
+                    self._now_utc().isoformat(timespec="seconds"),
+                    user_id,
+                    normalized_subscription_id,
+                ),
+            )
+
+            updated = conn.execute(
+                """
+                SELECT s.id, s.preset_id, p.name AS preset_name, s.channel, s.rule_json,
+                       s.enabled, s.created_at, s.updated_at
+                FROM user_subscriptions s
+                JOIN user_filter_presets p ON p.id = s.preset_id AND p.user_id = s.user_id
+                WHERE s.user_id = ? AND s.id = ?
+                """,
+                (user_id, normalized_subscription_id),
+            ).fetchone()
+            if updated is None:
+                raise UserAuthNotFoundError("subscription not found")
+            return self._subscription_from_row(updated)
+
+    def delete_subscription(self, user_id: int, subscription_id: str) -> bool:
+        normalized_subscription_id = (subscription_id or "").strip()
+        if not normalized_subscription_id:
+            raise UserAuthValidationError("subscription id is required")
+
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM user_subscriptions WHERE user_id = ? AND id = ?",
+                (user_id, normalized_subscription_id),
+            )
+            return cursor.rowcount > 0
+
+    def _notification_from_row(self, row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "id": str(row["id"]),
+            "subscription_id": str(row["subscription_id"]) if row["subscription_id"] else None,
+            "level": str(row["level"]),
+            "title": str(row["title"]),
+            "body": str(row["body"]),
+            "read_at": str(row["read_at"]) if row["read_at"] else None,
+            "created_at": str(row["created_at"]),
+        }
+
+    def list_notifications(
+        self,
+        user_id: int,
+        *,
+        unread_only: bool = False,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        safe_limit = max(1, min(200, int(limit)))
+        safe_offset = max(0, int(offset))
+
+        with self._connect() as conn:
+            where_sql = "WHERE user_id = ?"
+            args: list[Any] = [user_id]
+            if unread_only:
+                where_sql += " AND read_at IS NULL"
+
+            total_row = conn.execute(
+                f"SELECT COUNT(1) AS total FROM user_notifications {where_sql}",
+                tuple(args),
+            ).fetchone()
+            total = int(total_row["total"]) if total_row is not None else 0
+
+            unread_row = conn.execute(
+                "SELECT COUNT(1) AS total FROM user_notifications WHERE user_id = ? AND read_at IS NULL",
+                (user_id,),
+            ).fetchone()
+            unread_count = int(unread_row["total"]) if unread_row is not None else 0
+
+            rows = conn.execute(
+                f"""
+                SELECT id, subscription_id, level, title, body, read_at, created_at
+                FROM user_notifications
+                {where_sql}
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+                """,
+                (*args, safe_limit, safe_offset),
+            ).fetchall()
+
+            return {
+                "total": total,
+                "unread_count": unread_count,
+                "items": [self._notification_from_row(row) for row in rows],
+            }
+
+    def mark_notification_read(self, user_id: int, notification_id: str) -> dict[str, Any]:
+        normalized_notification_id = (notification_id or "").strip()
+        if not normalized_notification_id:
+            raise UserAuthValidationError("notification id is required")
+
+        with self._connect() as conn:
+            existing = conn.execute(
+                """
+                SELECT id, subscription_id, level, title, body, read_at, created_at
+                FROM user_notifications
+                WHERE user_id = ? AND id = ?
+                """,
+                (user_id, normalized_notification_id),
+            ).fetchone()
+            if existing is None:
+                raise UserAuthNotFoundError("notification not found")
+
+            if existing["read_at"] is None:
+                conn.execute(
+                    """
+                    UPDATE user_notifications
+                    SET read_at = ?
+                    WHERE user_id = ? AND id = ?
+                    """,
+                    (
+                        self._now_utc().isoformat(timespec="seconds"),
+                        user_id,
+                        normalized_notification_id,
+                    ),
+                )
+
+            updated = conn.execute(
+                """
+                SELECT id, subscription_id, level, title, body, read_at, created_at
+                FROM user_notifications
+                WHERE user_id = ? AND id = ?
+                """,
+                (user_id, normalized_notification_id),
+            ).fetchone()
+            if updated is None:
+                raise UserAuthNotFoundError("notification not found")
+            return self._notification_from_row(updated)
+
+    def mark_all_notifications_read(self, user_id: int) -> int:
+        with self._connect() as conn:
+            now_iso = self._now_utc().isoformat(timespec="seconds")
+            cursor = conn.execute(
+                """
+                UPDATE user_notifications
+                SET read_at = ?
+                WHERE user_id = ? AND read_at IS NULL
+                """,
+                (now_iso, user_id),
+            )
+            return int(cursor.rowcount)
+
+    @staticmethod
+    def _filters_as_values(filters: dict[str, Any], key: str, *, upper: bool = False) -> set[str] | None:
+        raw = filters.get(key)
+        values: set[str] = set()
+
+        if isinstance(raw, str):
+            values = {item.strip() for item in raw.split(",") if item.strip()}
+        elif isinstance(raw, list):
+            values = {str(item).strip() for item in raw if str(item).strip()}
+
+        if not values:
+            return None
+        if upper:
+            return {item.upper() for item in values}
+        return values
+
+    def _apply_preset_filters(self, rows: list[dict[str, Any]], filters: dict[str, Any]) -> list[dict[str, Any]]:
+        has_note_raw = filters.get("has_note")
+        has_note = has_note_raw if isinstance(has_note_raw, bool) else None
+        search_text_raw = filters.get("search_text")
+        search_text = str(search_text_raw or "").strip() or None
+
+        return analytics.filter_rows(
+            rows,
+            visa_types=self._filters_as_values(filters, "visa_types", upper=True),
+            consulates=self._filters_as_values(filters, "consulates"),
+            statuses=self._filters_as_values(filters, "statuses"),
+            entries=self._filters_as_values(filters, "entries"),
+            months=self._filters_as_values(filters, "months"),
+            majors=self._filters_as_values(filters, "majors"),
+            major_categories_l1=self._filters_as_values(filters, "major_categories_l1"),
+            major_categories_l2=self._filters_as_values(filters, "major_categories_l2"),
+            employers=self._filters_as_values(filters, "employers"),
+            detail_cities=self._filters_as_values(filters, "detail_cities"),
+            detail_states=self._filters_as_values(filters, "detail_states"),
+            has_note=has_note,
+            search_text=search_text,
+        )
+
+    def evaluate_subscriptions(
+        self,
+        *,
+        rows: list[dict[str, Any]],
+        previous_rows: list[dict[str, Any]] | None,
+    ) -> int:
+        if not rows:
+            return 0
+
+        baseline_rows = previous_rows or []
+        if not baseline_rows:
+            return 0
+
+        created_count = 0
+        with self._connect() as conn:
+            subscriptions = conn.execute(
+                """
+                SELECT s.id, s.user_id, s.preset_id, p.name AS preset_name, p.filters_json, s.rule_json,
+                       s.enabled, s.channel
+                FROM user_subscriptions s
+                JOIN user_filter_presets p ON p.id = s.preset_id AND p.user_id = s.user_id
+                WHERE s.enabled = 1 AND s.channel = 'in_app'
+                """
+            ).fetchall()
+
+            for subscription in subscriptions:
+                try:
+                    preset_filters = self._parse_filters(str(subscription["filters_json"]))
+                    current_subset = self._apply_preset_filters(rows, preset_filters)
+                    previous_subset = self._apply_preset_filters(baseline_rows, preset_filters)
+
+                    current_overview = analytics.overview_stats(current_subset)
+                    previous_overview = analytics.overview_stats(previous_subset)
+                    current_total = int(current_overview.get("total_cases") or 0)
+                    previous_total = int(previous_overview.get("total_cases") or 0)
+
+                    rule_payload = self._parse_filters(str(subscription["rule_json"]))
+                    rule = self._normalize_subscription_rule(rule_payload)
+                    min_sample_size = int(rule["min_sample_size"])
+                    if current_total < min_sample_size or previous_total < min_sample_size:
+                        continue
+
+                    current_pending_ratio = (
+                        float(current_overview.get("pending_cases") or 0) / current_total
+                        if current_total
+                        else 0.0
+                    )
+                    previous_pending_ratio = (
+                        float(previous_overview.get("pending_cases") or 0) / previous_total
+                        if previous_total
+                        else 0.0
+                    )
+
+                    current_median = float(current_overview.get("median_days") or 0.0)
+                    previous_median = float(previous_overview.get("median_days") or 0.0)
+                    current_p90 = float(current_overview.get("p90_days") or 0.0)
+                    previous_p90 = float(previous_overview.get("p90_days") or 0.0)
+                    current_tail = float(current_overview.get("long_tail_90plus_ratio") or 0.0)
+                    previous_tail = float(previous_overview.get("long_tail_90plus_ratio") or 0.0)
+
+                    reasons: list[str] = []
+                    if current_pending_ratio - previous_pending_ratio >= float(rule["pending_ratio_delta_ge"]):
+                        reasons.append(
+                            f"Pending 比率上升到 {current_pending_ratio:.1%}（之前 {previous_pending_ratio:.1%}）"
+                        )
+                    if current_median - previous_median >= float(rule["median_days_delta_ge"]):
+                        reasons.append(
+                            f"中位耗时上升到 {current_median:.1f} 天（之前 {previous_median:.1f} 天）"
+                        )
+                    if current_p90 - previous_p90 >= float(rule["p90_days_delta_ge"]):
+                        reasons.append(
+                            f"P90 上升到 {current_p90:.1f} 天（之前 {previous_p90:.1f} 天）"
+                        )
+                    if current_tail - previous_tail >= float(rule["long_tail_ratio_delta_ge"]):
+                        reasons.append(
+                            f"长尾占比上升到 {current_tail:.1%}（之前 {previous_tail:.1%}）"
+                        )
+
+                    if not reasons:
+                        continue
+
+                    now = self._now_utc()
+                    cooldown_hours = int(rule["cooldown_hours"])
+                    window_start = (now - timedelta(hours=cooldown_hours)).isoformat(timespec="seconds")
+                    title = f"筛选【{subscription['preset_name']}】出现波动"
+                    body = "；".join(reasons)
+
+                    duplicate = conn.execute(
+                        """
+                        SELECT id
+                        FROM user_notifications
+                        WHERE user_id = ?
+                          AND subscription_id = ?
+                          AND title = ?
+                          AND body = ?
+                          AND read_at IS NULL
+                          AND created_at >= ?
+                        LIMIT 1
+                        """,
+                        (
+                            int(subscription["user_id"]),
+                            str(subscription["id"]),
+                            title,
+                            body,
+                            window_start,
+                        ),
+                    ).fetchone()
+                    if duplicate is not None:
+                        continue
+
+                    conn.execute(
+                        """
+                        INSERT INTO user_notifications (
+                            id, user_id, subscription_id, level, title, body, read_at, created_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            uuid4().hex,
+                            int(subscription["user_id"]),
+                            str(subscription["id"]),
+                            "warning" if len(reasons) >= 2 else "info",
+                            title,
+                            body,
+                            None,
+                            now.isoformat(timespec="seconds"),
+                        ),
+                    )
+                    created_count += 1
+                except UserAuthValidationError:
+                    continue
+
+        return created_count
 
 
 user_auth_service = UserAuthService()
