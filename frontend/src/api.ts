@@ -21,6 +21,7 @@ import type {
     MetaState,
     MonthlyItem,
     OptionsResponse,
+    RecommendationResponse,
     OverviewStats,
     RefreshPayload,
     SensitivityItem,
@@ -451,6 +452,12 @@ export async function getComparison(filters: Filters): Promise<ComparisonData> {
     const params = paramsFromFilters(filters)
     const query = params.toString()
     return fetchJson<ComparisonData>(`/stats/comparison${query ? `?${query}` : ''}`)
+}
+
+export async function getRecommendation(filters: Filters): Promise<RecommendationResponse> {
+    const params = paramsFromFilters(filters)
+    const query = params.toString()
+    return fetchJson<RecommendationResponse>(`/stats/recommendation${query ? `?${query}` : ''}`)
 }
 
 export async function getAnomalies(filters: Filters, thresholdDays = 120, limit = 50): Promise<AnomalyItem[]> {

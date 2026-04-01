@@ -364,6 +364,52 @@
         "reasonFinalizedLongWait": "已结案但等待时间偏长",
         "reasonPendingLongWait": "仍在审理且等待时间偏长"
     },
+    "suggestion": {
+        "title": "建议引擎（最小闭环）",
+        "hint": "基于当前筛选自动生成概率区间、档位与依据链。",
+        "loading": "建议计算中...",
+        "empty": "当前筛选下暂无可输出建议。",
+        "insufficient": "样本量偏少，建议仅供参考。",
+        "confidenceBand": "可信档位",
+        "sampleSize": "样本量",
+        "maturity": "成熟度",
+        "probability": "概率",
+        "interval": "区间",
+        "showEvidence": "展开依据",
+        "hideEvidence": "收起依据",
+        "level": {
+            "high": "高",
+            "medium": "中",
+            "low": "低",
+            "insufficient": "样本不足"
+        },
+        "direction": {
+            "higher_is_better": "该指标越高越好",
+            "lower_is_better": "该指标越低越好"
+        },
+        "items": {
+            "approval_probability": {
+                "title": "Clear 概率"
+            },
+            "within_90_days_probability": {
+                "title": "90天内完成概率"
+            },
+            "long_tail_risk": {
+                "title": "长尾风险概率"
+            }
+        },
+        "metrics": {
+            "clear_ratio": "Clear 占比",
+            "finalized_cases": "结案样本",
+            "maturity_ratio": "成熟度",
+            "p90_days": "P90 天数",
+            "long_tail_90plus_ratio": "90天以上占比",
+            "pending_ratio": "Pending 比率变化",
+            "sample_size": "样本量",
+            "anomaly_count": "异常案例数",
+            "data_freshness_seconds": "数据新鲜度"
+        }
+    },
     "cases": {
         "title": "案例明细",
         "summary": "当前返回 {{count}} / {{total}}",
@@ -419,6 +465,7 @@
         "distribution": "分布统计加载遇到问题：{{message}}",
         "comparison": "月份对比加载遇到问题：{{message}}",
         "anomalies": "异常检测加载遇到问题：{{message}}",
+        "recommendation": "建议模块加载遇到问题：{{message}}",
         "refresh": "刷新遇到问题：{{message}}",
         "retryAction": "重试加载",
         "reason": {

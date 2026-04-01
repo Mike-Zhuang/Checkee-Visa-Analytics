@@ -15,6 +15,7 @@ import {
     getMonthly,
     getOptions,
     getOverview,
+    getRecommendation,
     getUserFilterPresets,
     getUserSession,
     loginUser,
@@ -33,6 +34,7 @@ import MonthlyChart from './components/MonthlyChart'
 import SensitivityTable from './components/SensitivityTable'
 import StatCards from './components/StatCards'
 import AnomalyTable from './components/AnomalyTable'
+import SuggestionPanel from './components/SuggestionPanel'
 import type {
     AnomalyItem,
     CaseSortBy,
@@ -47,6 +49,7 @@ import type {
     MonthlyItem,
     OptionsResponse,
     OverviewStats,
+    RecommendationResponse,
     RefreshPayload,
     SensitivityItem,
     UserFilterPresetItem
@@ -78,6 +81,7 @@ type ErrorKey =
     | 'distribution'
     | 'comparison'
     | 'anomalies'
+    | 'recommendation'
     | 'metaState'
     | 'cases'
     | 'options'
@@ -147,6 +151,7 @@ export default function App() {
     const [distribution, setDistribution] = useState<DistributionItem[]>([])
     const [comparison, setComparison] = useState<ComparisonData | null>(null)
     const [anomalies, setAnomalies] = useState<AnomalyItem[]>([])
+    const [recommendation, setRecommendation] = useState<RecommendationResponse | null>(null)
     const [cases, setCases] = useState<CaseItem[]>([])
     const [caseTotal, setCaseTotal] = useState(0)
     const [page, setPage] = useState(1)
@@ -405,7 +410,7 @@ export default function App() {
 
     const fetchOverviewBundle = async (activeFilters: Filters) => {
         setOverviewLoading(true)
-        clearErrors(['overview', 'monthly', 'sensitivity', 'cohorts', 'distribution', 'comparison', 'anomalies'])
+        clearErrors(['overview', 'monthly', 'sensitivity', 'cohorts', 'distribution', 'comparison', 'anomalies', 'recommendation'])
 
         const [
             overviewRes,
@@ -414,7 +419,8 @@ export default function App() {
             cohortsRes,
             distributionRes,
             comparisonRes,
-            anomaliesRes
+            anomaliesRes,
+            recommendationRes
         ] = await Promise.allSettled([
             getOverview(activeFilters),
             getMonthly(activeFilters),
@@ -422,7 +428,8 @@ export default function App() {
             getCohorts(activeFilters),
             getDistribution(activeFilters),
             getComparison(activeFilters),
-            getAnomalies(activeFilters)
+            getAnomalies(activeFilters),
+            getRecommendation(activeFilters)
         ])
 
         if (overviewRes.status === 'fulfilled') {
@@ -465,6 +472,12 @@ export default function App() {
             setAnomalies(anomaliesRes.value)
         } else {
             setError('anomalies', t('errors.anomalies', { message: formatReason(anomaliesRes.reason) }))
+        }
+
+        if (recommendationRes.status === 'fulfilled') {
+            setRecommendation(recommendationRes.value)
+        } else {
+            setError('recommendation', t('errors.recommendation', { message: formatReason(recommendationRes.reason) }))
         }
 
         setOverviewLoading(false)
@@ -839,6 +852,11 @@ export default function App() {
             />
 
             <StatCards data={overview} />
+            <SuggestionPanel
+                data={recommendation}
+                loading={overviewLoading}
+                error={errors.recommendation ?? null}
+            />
             <MonthlyChart
                 data={monthly}
                 onSelectMonth={(month) => {

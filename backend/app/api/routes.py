@@ -37,6 +37,7 @@ from app.core.schemas import (
     DistributionRow,
     HealthResponse,
     OptionsResponse,
+    RecommendationResponse,
     RefreshRequest,
     RefreshResponse,
     UserAuthRequest,
@@ -73,6 +74,45 @@ def _split_csv_values(raw: str | None, upper: bool = False) -> set[str] | None:
     if upper:
         return {v.upper() for v in values}
     return values
+
+
+def _split_csv_list(raw: str | None, upper: bool = False) -> list[str]:
+    values = _split_csv_values(raw, upper=upper)
+    if not values:
+        return []
+    return sorted(values)
+
+
+def _filter_applied_snapshot(
+    visa_types: str | None,
+    consulates: str | None,
+    statuses: str | None,
+    entries: str | None,
+    months: str | None,
+    major_categories_l1: str | None,
+    major_categories_l2: str | None,
+    majors: str | None,
+    employers: str | None,
+    detail_cities: str | None,
+    detail_states: str | None,
+    has_note: bool | None,
+    search_text: str | None,
+) -> dict[str, object]:
+    return {
+        "visa_types": _split_csv_list(visa_types, upper=True),
+        "consulates": _split_csv_list(consulates),
+        "statuses": _split_csv_list(statuses),
+        "entries": _split_csv_list(entries),
+        "months": _split_csv_list(months),
+        "major_categories_l1": _split_csv_list(major_categories_l1),
+        "major_categories_l2": _split_csv_list(major_categories_l2),
+        "majors": _split_csv_list(majors),
+        "employers": _split_csv_list(employers),
+        "detail_cities": _split_csv_list(detail_cities),
+        "detail_states": _split_csv_list(detail_states),
+        "has_note": has_note,
+        "search_text": (search_text or "").strip(),
+    }
 
 
 def _filtered_rows(
@@ -897,6 +937,64 @@ def anomalies(
         for item in service.get_anomalies(filtered, threshold_days=threshold_days, limit=limit)
     ]
     return {"items": items}
+
+
+@router.get("/stats/recommendation", response_model=RecommendationResponse)
+def recommendation(
+    visa_types: str | None = None,
+    consulates: str | None = None,
+    statuses: str | None = None,
+    entries: str | None = None,
+    months: str | None = None,
+    major_categories_l1: str | None = None,
+    major_categories_l2: str | None = None,
+    majors: str | None = None,
+    employers: str | None = None,
+    detail_cities: str | None = None,
+    detail_states: str | None = None,
+    has_note: bool | None = None,
+    search_text: str | None = None,
+) -> RecommendationResponse:
+    filtered = _filtered_rows(
+        visa_types,
+        consulates,
+        statuses,
+        entries,
+        months,
+        major_categories_l1,
+        major_categories_l2,
+        majors,
+        employers,
+        detail_cities,
+        detail_states,
+        has_note,
+        search_text,
+    )
+
+    meta = service.get_meta()
+    freshness_raw = meta.get("data_freshness_seconds")
+    freshness_seconds = int(freshness_raw) if isinstance(freshness_raw, int) else None
+
+    payload = service.get_recommendation(filtered, data_freshness_seconds=freshness_seconds)
+    return RecommendationResponse(
+        filter_applied=_filter_applied_snapshot(
+            visa_types,
+            consulates,
+            statuses,
+            entries,
+            months,
+            major_categories_l1,
+            major_categories_l2,
+            majors,
+            employers,
+            detail_cities,
+            detail_states,
+            has_note,
+            search_text,
+        ),
+        summary=payload["summary"],
+        items=payload["items"],
+    )
 
 
 @router.get("/export/report", response_class=PlainTextResponse)

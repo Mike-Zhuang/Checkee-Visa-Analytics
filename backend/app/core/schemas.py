@@ -224,6 +224,39 @@ class ComparisonResponse(BaseModel):
     delta: ComparisonMetrics | None = None
 
 
+class RecommendationEvidenceItem(BaseModel):
+    metric: str
+    value: float
+    note: str | None = None
+
+
+class RecommendationItem(BaseModel):
+    id: str
+    estimate: float
+    probability_interval_low: float
+    probability_interval_high: float
+    level: Literal["high", "medium", "low", "insufficient"]
+    direction: Literal["higher_is_better", "lower_is_better"]
+    reasons: list[str]
+    evidence: list[RecommendationEvidenceItem]
+
+
+class RecommendationSummary(BaseModel):
+    sample_size: int
+    finalized_cases: int
+    pending_cases: int
+    maturity_ratio: float
+    confidence_band: Literal["high", "medium", "low", "insufficient"]
+    insufficient_data: bool
+    data_freshness_seconds: int | None = None
+
+
+class RecommendationResponse(BaseModel):
+    filter_applied: dict[str, Any]
+    summary: RecommendationSummary
+    items: list[RecommendationItem]
+
+
 class AnomalyRow(BaseModel):
     case_number: str
     visa_type: str

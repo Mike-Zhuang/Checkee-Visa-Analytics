@@ -122,6 +122,59 @@ def test_overview_with_no_match_returns_zeroes(client, seed_cases) -> None:
     assert payload["median_days"] == 0.0
 
 
+def test_recommendation_returns_probability_intervals(client, seed_cases) -> None:
+    response = client.get("/api/v1/stats/recommendation")
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["summary"]["sample_size"] == 4
+    assert payload["summary"]["finalized_cases"] == 2
+    assert payload["summary"]["insufficient_data"] is True
+
+    items = payload["items"]
+    assert len(items) == 3
+    for item in items:
+        low = item["probability_interval_low"]
+        estimate = item["estimate"]
+        high = item["probability_interval_high"]
+        assert item["level"] == "insufficient"
+        assert 0.0 <= low <= estimate <= high <= 1.0
+        assert item["evidence"]
+
+
+def test_recommendation_no_match_returns_empty_items(client, seed_cases) -> None:
+    response = client.get("/api/v1/stats/recommendation", params={"months": "1999-01"})
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["summary"]["sample_size"] == 0
+    assert payload["summary"]["insufficient_data"] is True
+    assert payload["summary"]["confidence_band"] == "insufficient"
+    assert payload["items"] == []
+
+
+def test_recommendation_includes_filter_snapshot(client, seed_cases) -> None:
+    response = client.get(
+        "/api/v1/stats/recommendation",
+        params={
+            "visa_types": "f1",
+            "statuses": "Pending",
+            "months": "2026-03",
+            "has_note": "true",
+            "search_text": "amazon",
+        },
+    )
+    assert response.status_code == 200
+
+    payload = response.json()
+    applied = payload["filter_applied"]
+    assert applied["visa_types"] == ["F1"]
+    assert applied["statuses"] == ["Pending"]
+    assert applied["months"] == ["2026-03"]
+    assert applied["has_note"] is True
+    assert applied["search_text"] == "amazon"
+
+
 def test_cohorts_distribution_and_comparison(client, seed_cases) -> None:
     cohorts_res = client.get("/api/v1/stats/cohorts")
     assert cohorts_res.status_code == 200

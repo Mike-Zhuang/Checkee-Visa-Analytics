@@ -97,6 +97,62 @@ def _safe_round(value: float, digits: int = 2, default: float = 0.0) -> float:
     return round(value, digits)
 
 
+def _clamp01(value: float) -> float:
+    return min(1.0, max(0.0, value))
+
+
+def _binary_rate_interval(successes: int, total: int, z_score: float = 1.96) -> tuple[float, float, float]:
+    if total <= 0:
+        return 0.0, 0.0, 0.0
+
+    probability = _clamp01(successes / total)
+    denominator = 1.0 + (z_score ** 2) / total
+    center = (probability + (z_score ** 2) / (2.0 * total)) / denominator
+    margin = (
+        z_score
+        * math.sqrt((probability * (1.0 - probability) + (z_score ** 2) / (4.0 * total)) / total)
+        / denominator
+    )
+    low = _clamp01(center - margin)
+    high = _clamp01(center + margin)
+    return probability, low, high
+
+
+def _confidence_band(
+    sample_size: int,
+    finalized_cases: int,
+    ci_width: float,
+    freshness_seconds: int | None,
+) -> str:
+    score = 0
+
+    if sample_size >= 80:
+        score += 2
+    elif sample_size >= 30:
+        score += 1
+
+    if finalized_cases >= 40:
+        score += 2
+    elif finalized_cases >= 15:
+        score += 1
+
+    if ci_width <= 0.15:
+        score += 2
+    elif ci_width <= 0.30:
+        score += 1
+
+    if freshness_seconds is None or freshness_seconds <= 3 * 24 * 60 * 60:
+        score += 1
+    elif freshness_seconds > 14 * 24 * 60 * 60:
+        score -= 1
+
+    if score >= 6:
+        return "high"
+    if score >= 3:
+        return "medium"
+    return "low"
+
+
 def filter_rows(
     rows: list[dict[str, str]],
     visa_types: set[str] | None = None,
@@ -388,6 +444,134 @@ def comparison_stats(rows: list[dict[str, str]]) -> dict[str, Any]:
             "p90_days": round(latest["p90_days"] - baseline["p90_days"], 2),
             "pending_ratio": round(latest["pending_ratio"] - baseline["pending_ratio"], 4),
         },
+    }
+
+
+def recommendation_stats(
+    rows: list[dict[str, str]],
+    *,
+    data_freshness_seconds: int | None = None,
+) -> dict[str, Any]:
+    overview = overview_stats(rows)
+    comparison = comparison_stats(rows)
+    anomaly_rows = anomalies(rows, threshold_days=120, limit=200)
+
+    sample_size = int(overview.get("total_cases") or 0)
+    finalized_cases = int(overview.get("finalized_cases") or 0)
+    pending_cases = int(overview.get("pending_cases") or 0)
+    maturity_ratio = float(overview.get("maturity_ratio") or 0.0)
+    insufficient_data = sample_size < 5 or finalized_cases < 5
+
+    if sample_size == 0 or finalized_cases == 0:
+        return {
+            "summary": {
+                "sample_size": sample_size,
+                "finalized_cases": finalized_cases,
+                "pending_cases": pending_cases,
+                "maturity_ratio": round(maturity_ratio, 4),
+                "confidence_band": "insufficient",
+                "insufficient_data": True,
+                "data_freshness_seconds": data_freshness_seconds,
+            },
+            "items": [],
+        }
+
+    clear_count = sum(1 for row in rows if str(row.get("status") or "").strip() == "Clear")
+    reject_count = sum(1 for row in rows if str(row.get("status") or "").strip() == "Reject")
+    finalized_total = clear_count + reject_count
+
+    approval_estimate, approval_low, approval_high = _binary_rate_interval(clear_count, finalized_total)
+
+    finalized_days = [
+        value
+        for value in (_to_int(row.get("waiting_days_calc")) for row in rows if _is_finalized(row))
+        if value is not None
+    ]
+    within_90_count = sum(1 for value in finalized_days if value <= 90)
+    within_90_estimate, within_90_low, within_90_high = _binary_rate_interval(within_90_count, len(finalized_days))
+
+    long_tail_count = sum(1 for value in finalized_days if value >= 120)
+    long_tail_estimate, long_tail_low, long_tail_high = _binary_rate_interval(long_tail_count, len(finalized_days))
+
+    ci_width = approval_high - approval_low
+    confidence_band = "insufficient" if insufficient_data else _confidence_band(
+        sample_size,
+        finalized_cases,
+        ci_width,
+        data_freshness_seconds,
+    )
+
+    pending_ratio_delta = 0.0
+    comparison_delta = comparison.get("delta")
+    if isinstance(comparison_delta, dict):
+        pending_ratio_delta = float(comparison_delta.get("pending_ratio") or 0.0)
+
+    p90_days = float(overview.get("p90_days") or 0.0)
+
+    items = [
+        {
+            "id": "approval_probability",
+            "estimate": round(approval_estimate, 4),
+            "probability_interval_low": round(approval_low, 4),
+            "probability_interval_high": round(approval_high, 4),
+            "level": confidence_band,
+            "direction": "higher_is_better",
+            "reasons": ["clear_ratio", "maturity_ratio", "sample_size"],
+            "evidence": [
+                {"metric": "clear_ratio", "value": round(approval_estimate, 4), "note": None},
+                {"metric": "finalized_cases", "value": float(finalized_cases), "note": None},
+                {"metric": "maturity_ratio", "value": round(maturity_ratio, 4), "note": None},
+            ],
+        },
+        {
+            "id": "within_90_days_probability",
+            "estimate": round(within_90_estimate, 4),
+            "probability_interval_low": round(within_90_low, 4),
+            "probability_interval_high": round(within_90_high, 4),
+            "level": confidence_band,
+            "direction": "higher_is_better",
+            "reasons": ["p90_days", "long_tail_90plus_ratio", "sample_size"],
+            "evidence": [
+                {"metric": "p90_days", "value": round(p90_days, 2), "note": None},
+                {
+                    "metric": "long_tail_90plus_ratio",
+                    "value": round(float(overview.get("long_tail_90plus_ratio") or 0.0), 4),
+                    "note": None,
+                },
+                {"metric": "sample_size", "value": float(sample_size), "note": None},
+            ],
+        },
+        {
+            "id": "long_tail_risk",
+            "estimate": round(long_tail_estimate, 4),
+            "probability_interval_low": round(long_tail_low, 4),
+            "probability_interval_high": round(long_tail_high, 4),
+            "level": confidence_band,
+            "direction": "lower_is_better",
+            "reasons": ["long_tail_90plus_ratio", "pending_ratio", "anomaly_count"],
+            "evidence": [
+                {
+                    "metric": "long_tail_90plus_ratio",
+                    "value": round(float(overview.get("long_tail_90plus_ratio") or 0.0), 4),
+                    "note": None,
+                },
+                {"metric": "pending_ratio", "value": round(pending_ratio_delta, 4), "note": "delta_vs_previous_month"},
+                {"metric": "anomaly_count", "value": float(len(anomaly_rows)), "note": None},
+            ],
+        },
+    ]
+
+    return {
+        "summary": {
+            "sample_size": sample_size,
+            "finalized_cases": finalized_cases,
+            "pending_cases": pending_cases,
+            "maturity_ratio": round(maturity_ratio, 4),
+            "confidence_band": confidence_band,
+            "insufficient_data": insufficient_data,
+            "data_freshness_seconds": data_freshness_seconds,
+        },
+        "items": items,
     }
 
 

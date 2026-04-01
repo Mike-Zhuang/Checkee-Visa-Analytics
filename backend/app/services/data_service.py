@@ -867,6 +867,14 @@ class DataService:
     def get_anomalies(self, rows: list[dict[str, str]], threshold_days: int, limit: int) -> list[dict[str, Any]]:
         return analytics.anomalies(rows, threshold_days=threshold_days, limit=limit)
 
+    def get_recommendation(
+        self,
+        rows: list[dict[str, str]],
+        *,
+        data_freshness_seconds: int | None = None,
+    ) -> dict[str, Any]:
+        return analytics.recommendation_stats(rows, data_freshness_seconds=data_freshness_seconds)
+
     def get_options(self, rows: list[dict[str, str]]) -> dict[str, Any]:
         options_payload = analytics.options(rows)
         rules = self._taxonomy_rules()

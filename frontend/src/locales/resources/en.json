@@ -364,6 +364,52 @@
         "reasonFinalizedLongWait": "Finalized but unusually long waiting time",
         "reasonPendingLongWait": "Still pending and unusually long waiting time"
     },
+    "suggestion": {
+        "title": "Recommendation Engine (MVP)",
+        "hint": "Auto-generated probability intervals, confidence level, and evidence chain from current filters.",
+        "loading": "Calculating recommendations...",
+        "empty": "No recommendation is available for current filters.",
+        "insufficient": "Sample size is limited. Treat these recommendations as directional only.",
+        "confidenceBand": "Confidence band",
+        "sampleSize": "Sample size",
+        "maturity": "Maturity",
+        "probability": "Probability",
+        "interval": "Interval",
+        "showEvidence": "Show evidence",
+        "hideEvidence": "Hide evidence",
+        "level": {
+            "high": "High",
+            "medium": "Medium",
+            "low": "Low",
+            "insufficient": "Insufficient"
+        },
+        "direction": {
+            "higher_is_better": "Higher is better",
+            "lower_is_better": "Lower is better"
+        },
+        "items": {
+            "approval_probability": {
+                "title": "Clear Probability"
+            },
+            "within_90_days_probability": {
+                "title": "Completion Within 90 Days"
+            },
+            "long_tail_risk": {
+                "title": "Long-tail Risk"
+            }
+        },
+        "metrics": {
+            "clear_ratio": "Clear ratio",
+            "finalized_cases": "Finalized cases",
+            "maturity_ratio": "Maturity ratio",
+            "p90_days": "P90 days",
+            "long_tail_90plus_ratio": "90+ days ratio",
+            "pending_ratio": "Pending ratio delta",
+            "sample_size": "Sample size",
+            "anomaly_count": "Anomaly count",
+            "data_freshness_seconds": "Data freshness"
+        }
+    },
     "cases": {
         "title": "Case Details",
         "summary": "Showing {{count}} / {{total}}",
@@ -419,6 +465,7 @@
         "distribution": "Distribution stats had a loading issue: {{message}}",
         "comparison": "Comparison had a loading issue: {{message}}",
         "anomalies": "Anomaly detection had a loading issue: {{message}}",
+        "recommendation": "Recommendations had a loading issue: {{message}}",
         "refresh": "Refresh had an issue: {{message}}",
         "retryAction": "Retry",
         "reason": {

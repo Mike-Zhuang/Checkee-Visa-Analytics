@@ -127,6 +127,42 @@ export type OverviewStats = {
     long_tail_90plus_ratio: number
 }
 
+export type RecommendationLevel = 'high' | 'medium' | 'low' | 'insufficient'
+export type RecommendationDirection = 'higher_is_better' | 'lower_is_better'
+
+export type RecommendationEvidenceItem = {
+    metric: string
+    value: number
+    note: string | null
+}
+
+export type RecommendationItem = {
+    id: string
+    estimate: number
+    probability_interval_low: number
+    probability_interval_high: number
+    level: RecommendationLevel
+    direction: RecommendationDirection
+    reasons: string[]
+    evidence: RecommendationEvidenceItem[]
+}
+
+export type RecommendationSummary = {
+    sample_size: number
+    finalized_cases: number
+    pending_cases: number
+    maturity_ratio: number
+    confidence_band: RecommendationLevel
+    insufficient_data: boolean
+    data_freshness_seconds: number | null
+}
+
+export type RecommendationResponse = {
+    filter_applied: Record<string, unknown>
+    summary: RecommendationSummary
+    items: RecommendationItem[]
+}
+
 export type MonthlyItem = {
     submit_month: string
     total_cases: number
